@@ -1,16 +1,8 @@
-import Game from './js/core/Game.js';
-import RenderManager from './js/rendering/RenderManager.js';
-import EventBus from './js/core/EventBus.js';
-import StateManager, { GameStates } from './js/core/StateManager.js';
-import * as EventTypes from './js/core/EventTypes.js';
-import DemoGameMode from './js/game/modes/DemoGameMode.js';
+import Game from './js/Game.js';
 
 // 当文档加载完成时初始化游戏
 window.addEventListener('DOMContentLoaded', () => {
-  console.log('初始化游戏框架...');
-
-  // 开启事件调试模式
-  EventBus.setDebugMode(true);
+  console.log('初始化...');
 
   const canvas = document.getElementById('renderCanvas');
   if (!canvas) {
@@ -18,31 +10,12 @@ window.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // 使用常量而不是字符串监听事件
-  EventBus.subscribe(EventTypes.STATE.CHANGED, (data) => {
-    console.log(`游戏状态变更: ${data.previous} -> ${data.current}`);
-  });
-
-  EventBus.subscribe(EventTypes.ASSETS.LOAD_COMPLETE, (assets) => {
-    console.log('所有资源加载完成');
-  });
-
-  EventBus.subscribe(EventTypes.RENDER.INITIALIZED, () => {
-    console.log('渲染系统已初始化');
-  });
-
   // 如果渲染系统和资源都加载完成，开始GAMEMODE_LOADING状态
 
-  // 添加调试UI（可选）
+  // 添加调试UI
   createDebugUI();
-
-  // 创建GameMode实例
-  const mode = new DemoGameMode();
-  // 注册监听器，以便在游戏模式初始化完成时执行特定操作
-  mode.prepareGameLaunch();
   // 启动游戏
   Game.initialize(canvas);
-  
 });
 
 /**
@@ -98,7 +71,7 @@ function createDebugUI() {
       lastTime = currentTime;
       
       // 更新其他调试信息
-      stateInfo.textContent = '状态: ' + StateManager.getCurrentState();
+      stateInfo.textContent = '状态: ' + Game.getCurrentState();
       objectsInfo.textContent = '游戏对象: ' + Game.gameObjects.length;
     }
     

@@ -8,25 +8,26 @@ export class BasicAttackCard extends CardBase {
       this.subtitle = '凡人武学';
       this.cultivationAPCost = 1; // Corrected typo
     }
-    activationEffect(ctx) {
+    activationEffect(ctx, owner) {
       // 造成{atk}伤害。
-      const damage = ctx.player.computedAttack * (1 + (ctx.playerActivationCount > 1 ? (ctx.playerActivationCount -1) * 0.5 : 0)); // Apply multi-activation bonus
-      ctx.launchAttackTo(ctx.player, ctx.enemy, damage);
+      const damage = owner.computedAttack * (1 + (owner.activationCount > 1 ? (owner.activationCount -1) * 0.5 : 0)); // Apply multi-activation bonus
+      const target = owner.isPlayer ? ctx.enemy : ctx.player; // If owner is player, target is enemy and vice versa
+      ctx.launchAttackTo(owner, target, damage);
     }
-    getDescription(ctx) {
-      const damage = ctx.player.computedAttack * (1 + (ctx.playerActivationCount > 0 ? (ctx.playerActivationCount) * 0.5 : 0)); // Show potential damage with multi-activation
+    getDescription(ctx, owner) {
+      const damage = owner.computedAttack * (1 + (owner.activationCount > 0 ? (owner.activationCount) * 0.5 : 0)); // Show potential damage with multi-activation
       return `【发】造成${damage.toFixed(2)}伤害。`;
     }
-    getCardMajorColor(ctx) {
+    getCardMajorColor(ctx, owner) {
       return "#ffdddd"; // Light red for attack cards
     }
-    getMinorColor(ctx) {
+    getMinorColor(ctx, owner) {
       return "#ffaaaa"; // Darker red for border
     }
-    getDecorationColor(ctx) {
+    getDecorationColor(ctx, owner) {
       return "#cc0000"; // Strong red for decoration
     }
-    // getDecorationType (ctx) {
+    // getDecorationType (ctx, owner) {
     //   return "stripe";
     // }
   }
@@ -40,30 +41,30 @@ import { TemporaryDefenceEffect } from './Effects.js'; // Import the effect clas
       this.subtitle = '凡人武学';
       this.cultivationAPCost = 1; // Corrected typo
     }
-    getDefenseBonus(ctx) {
+    getDefenseBonus(ctx, owner) {
       // 计算防御力加成
-      const defenseBonus = ctx.player.baseDefense * (1 + (ctx.playerActivationCount > 0 ? (ctx.playerActivationCount) * 0.5 : 0)); // Apply multi-activation bonus
+      const defenseBonus = owner.baseDefense * (1 + (owner.activationCount > 0 ? (owner.activationCount) * 0.5 : 0)); // Apply multi-activation bonus
       return defenseBonus;
     }
-    activationEffect(ctx) {
+    activationEffect(ctx, owner) {
       // 增加10点临时防御力
-      const effect = new TemporaryDefenceEffect(2, this.getDefenseBonus(ctx)); // Duration is 2 rounds
-      ctx.addEffect(ctx.player, effect);
+      const effect = new TemporaryDefenceEffect(2, this.getDefenseBonus(ctx, owner)); // Duration is 2 rounds
+      ctx.addEffect(owner, effect, owner);
     }
-    getDescription(ctx) {
-      const defenseBonus = this.getDefenseBonus(ctx); // Show potential bonus with multi-activation
+    getDescription(ctx, owner) {
+      const defenseBonus = this.getDefenseBonus(ctx, owner); // Show potential bonus with multi-activation
       return `【发】下2回合临时增加${defenseBonus.toFixed(2)}防御力。`;
     }
-    getCardMajorColor(ctx) {
+    getCardMajorColor(ctx, owner) {
       return "#ddddff"; // Light blue for defense cards
     }
-    getMinorColor(ctx) {
+    getMinorColor(ctx, owner) {
       return "#aaaaff"; // Darker blue for border
     }
-    getDecorationColor(ctx) {
+    getDecorationColor(ctx, owner) {
       return "#0000cc"; // Strong blue for decoration
     }
-    // getDecorationType (ctx) {
+    // getDecorationType (ctx, owner) {
     //   return "corner";
     // }
   }
@@ -78,8 +79,12 @@ import { TemporaryDefenceEffect } from './Effects.js'; // Import the effect clas
         this.subtitle = '凡人武学';
         this.maxPendingActivation = 1; // 最大挂起发动次数
     }
-    activationEffect(ctx) {
-        ctx.addEffect(ctx.player, new YingChengEffect());
+    getDescription(ctx, owner) {
+        return `【发】下回合减伤50%，下下回合受伤害增伤50%`;
+    }
+    activationEffect(ctx, owner) {
+        const effect = new YingChengEffect();
+        ctx.addEffect(owner, effect, owner);
     }
   };
   
@@ -92,24 +97,24 @@ import { TemporaryDefenceEffect } from './Effects.js'; // Import the effect clas
       this.leinoType = leinoType; // 灵根类型（决定产出灵气的种类）
       this.leinoQuality = leionQuality; // 灵根品质（决定产出灵气的数量）
     }
-    cultivationEffect(ctx) {
+    cultivationEffect(ctx, owner) {
       // 产出灵气
-      if(ctx.consumeDantianStorage(this.leinoQuality)) {
-        ctx.produceAura(this.leinoType, this.leinoQuality);
-        ctx.addLog('Player', `产出 ${this.leinoQuality} 点 ${this.leinoType} 灵气。`);
+      if(ctx.consumeDantianStorage(owner, this.leinoQuality)) {
+        ctx.produceAura(owner, this.leinoType, this.leinoQuality);
+        ctx.addLog(owner, `产出 ${this.leinoQuality} 点 ${this.leinoType} 灵气。`);
       } else {
-        ctx.addLog('Player', `丹田储量不足，无法产出灵气。`);
+        ctx.addLog(owner, `丹田储量不足，无法产出灵气。`);
       }
     }
-    getPassiveDescription(ctx) {
+    getPassiveDescription(ctx, owner) {
       return `【运】产出${this.leinoQuality}点${this.leinoType}灵气。`;
     }
-    getDescription(ctx) {
+    getDescription(ctx, owner) {
       // 显示灵气产出
-      const activationAmount = ctx.playerActivationCount > 0 ? ctx.playerActivationCount : 1; // If not yet activated, show for 1 activation
+      const activationAmount = owner.activationCount > 0 ? owner.activationCount : 1; // If not yet activated, show for 1 activation
       return `【发】消耗${activationAmount}丹田，产出${activationAmount}点${this.leinoType}灵气。`;
     }
-    getCardMajorColor(ctx) {
+    getCardMajorColor(ctx, owner) {
       switch (this.leinoType) {
         case '金': return '#FFECB3'; // Light Gold
         case '木': return '#C8E6C9'; // Light Green
@@ -120,7 +125,7 @@ import { TemporaryDefenceEffect } from './Effects.js'; // Import the effect clas
         default: return '#f0f0f0';
       }
     }
-    getMinorColor(ctx) {
+    getMinorColor(ctx, owner) {
       switch (this.leinoType) {
         case '金': return '#FFD54F'; // Gold
         case '木': return '#81C784'; // Green
@@ -131,7 +136,7 @@ import { TemporaryDefenceEffect } from './Effects.js'; // Import the effect clas
         default: return '#cccccc';
       }
     }
-    getDecorationColor(ctx) {
+    getDecorationColor(ctx, owner) {
       switch (this.leinoType) {
         case '金': return '#FFA000'; // Dark Gold
         case '木': return '#388E3C'; // Dark Green
@@ -142,20 +147,20 @@ import { TemporaryDefenceEffect } from './Effects.js'; // Import the effect clas
         default: return '#aaaaaa';
       }
     }
-    getDecorationType (ctx) {
+    getDecorationType(ctx, owner) {
       return "stripe"; // Example, can be customized further
     }
-    getCanActivate(ctx) {
-      return ctx.player.dantianAura > 0; // Only allow activation if there is enough dantian storage
+    getCanActivate(ctx, owner) {
+      return owner.dantianAura > 0; // Only allow activation if there is enough dantian storage
     }
-    activationEffect(ctx) {
+    activationEffect(ctx, owner) {
       // 产出额外1点灵气
-      const activationAmount = ctx.playerActivationCount > 0 ? ctx.playerActivationCount : 1;
-      if(ctx.consumeDantianStorage(activationAmount)) {
-        ctx.produceAura(this.leinoType, activationAmount);
-        ctx.addLog('Player', `额外产出 ${activationAmount} 点 ${this.leinoType} 灵气。`);
+      const activationAmount = owner.activationCount > 0 ? owner.activationCount : 1;
+      if(ctx.consumeDantianStorage(owner, activationAmount)) {
+        ctx.produceAura(owner, this.leinoType, activationAmount);
+        ctx.addLog(owner, `额外产出 ${activationAmount} 点 ${this.leinoType} 灵气。`);
       } else {
-        ctx.addLog('Player', `丹田储量不足，无法发动额外产出。`);
+        ctx.addLog(owner, `丹田储量不足，无法发动额外产出。`);
       }
     }
   }
@@ -168,40 +173,41 @@ import { TemporaryDefenceEffect } from './Effects.js'; // Import the effect clas
         this.name = '木剑';
         this.subtitle = '青木决';
       }
-      cultivationEffect(ctx) {
-        if(ctx.player.currentAuraSum() == 0) {
-            ctx.produceAura("mu", 1);
+      cultivationEffect(ctx, owner) {
+        if(owner.currentAuraSum() == 0) {
+            ctx.produceAura(owner, "mu", 1);
         }
       }
-      getPassiveDescription(ctx) {
+      getPassiveDescription(ctx, owner) {
         return `【运】若没灵气，引1木灵气。`;
       }
-      getDmg (ctx) {
-        const activationAmount = ctx.playerActivationCount > 0 ? ctx.playerActivationCount : 1; // If not yet activated, show for 1 activation
-        return 7 + 0.3 * (1 + activationAmount) * ctx.player.computedAttack * (3 + ctx.player.currentMu);
+      getDmg(ctx, owner) {
+        const activationAmount = owner.activationCount > 0 ? owner.activationCount : 1; // If not yet activated, show for 1 activation
+        return 7 + 0.3 * (1 + activationAmount) * owner.computedAttack * (3 + owner.currentMu);
       }
-      getDescription(ctx) {
-        var dmg = this.getDmg(ctx);
+      getDescription(ctx, owner) {
+        var dmg = this.getDmg(ctx, owner);
         return `【发】消耗所有木灵气，造成${dmg}伤害。`;
       }
-      getCardMajorColor(ctx) {
+      getCardMajorColor(ctx, owner) {
         return "#99FFAA"; // Light green
       }
-      getMinorColor(ctx) {
+      getMinorColor(ctx, owner) {
         return '#81C784'; // Green
       }
-      getCanActivate(ctx) {
-        return ctx.player.currentMu > 0; // Only allow activation if there is enough dantian storage
+      getCanActivate(ctx, owner) {
+        return owner.currentMu > 0; // Only allow activation if there is enough dantian storage
       }
-      activationEffect(ctx) {
-        var damage = this.getDmg(ctx);
-        ctx.consumeAura("mu", ctx.player.currentMu);
-        ctx.launchAttackTo(ctx.player, ctx.enemy, damage);
+      activationEffect(ctx, owner) {
+        var damage = this.getDmg(ctx, owner);
+        ctx.consumeAura(owner, "mu", owner.currentMu);
+        const target = owner.isPlayer ? ctx.enemy : ctx.player; // If owner is player, target is enemy and vice versa
+        ctx.launchAttackTo(owner, target, damage);
       }
-      cultivationEffect(ctx) {
+      cultivationEffect(ctx, owner) {
         // 产出灵气
-        if(ctx.player.currentAuraSum() == 0) {
-            ctx.produceAura("mu", 1);
+        if(owner.currentAuraSum() == 0) {
+            ctx.produceAura(owner, "mu", 1);
         }
       }
   };

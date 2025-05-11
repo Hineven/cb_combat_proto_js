@@ -29,7 +29,8 @@ const props = defineProps({
   card: { type: Object, required: true },
   isFirstCard: { type: Boolean, default: false },
   activationCount: { type: Number, default: 0 },
-  specialEffect: { type: String, default: '' } // 'cultivating', 'activating'
+  specialEffect: { type: String, default: '' }, // 'cultivating', 'activating'
+  owner: { type: Object, default: () => gameContext.player } // Default to player if not specified
 });
 
 const cachedDescription = ref('');
@@ -63,8 +64,8 @@ const activationCountClass = computed(() => {
 });
 
 const cardStyle = computed(() => {
-  const majorColor = typeof props.card.getCardMajorColor === 'function' ? props.card.getCardMajorColor(gameContext) : '#fff';
-  const minorColor = typeof props.card.getMinorColor === 'function' ? props.card.getMinorColor(gameContext) : '#ddd';
+  const majorColor = typeof props.card.getCardMajorColor === 'function' ? props.card.getCardMajorColor(gameContext, props.owner) : '#fff';
+  const minorColor = typeof props.card.getMinorColor === 'function' ? props.card.getMinorColor(gameContext, props.owner) : '#ddd';
   return {
     background: majorColor,
     borderColor: minorColor
@@ -72,11 +73,11 @@ const cardStyle = computed(() => {
 });
 
 const decorationColor = computed(() => {
-  return typeof props.card.getDecorationColor === 'function' ? props.card.getDecorationColor(gameContext) : 'transparent';
+  return typeof props.card.getDecorationColor === 'function' ? props.card.getDecorationColor(gameContext, props.owner) : 'transparent';
 });
 
 const decorationType = computed(() => {
-  return typeof props.card.getDecorationType === 'function' ? props.card.getDecorationType(gameContext) : 'none'; // e.g., 'none', 'stripe', 'corner'
+  return typeof props.card.getDecorationType === 'function' ? props.card.getDecorationType(gameContext, props.owner) : 'none'; // e.g., 'none', 'stripe', 'corner'
 });
 
 const decorationStyle = computed(() => {
@@ -101,10 +102,10 @@ const cornerDecorationStyle = computed(() => {
 const updateDescriptions = () => {
   if (props.card) {
     if (typeof props.card.getDescription === 'function') {
-      cachedDescription.value = props.card.getDescription(gameContext);
+      cachedDescription.value = props.card.getDescription(gameContext, props.owner);
     }
     if (typeof props.card.getPassiveDescription === 'function') {
-      passiveDescription.value = props.card.getPassiveDescription(gameContext);
+      passiveDescription.value = props.card.getPassiveDescription(gameContext, props.owner);
     } else {
       passiveDescription.value = ''; // Clear if method doesn't exist
     }
@@ -112,7 +113,7 @@ const updateDescriptions = () => {
 };
 
 // Initial load and card changes
-watch(() => props.card, (newCard) => {
+watch(() => [props.card, props.owner, props.activationCount], () => {
   updateDescriptions();
 }, { immediate: true, deep: true }); // Added deep: true for reactivity on card properties if needed
 

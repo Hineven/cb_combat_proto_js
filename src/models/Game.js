@@ -37,13 +37,14 @@ export class Effect {
     this.description = ''; // 效果的描述，用于细节面板中显示。
     this.type = EffectType.Buff; // 效果的类型
     this.shouldDisplay = true; // 是否在UI上显示
+    this.owner = null; // 效果的所有者
   }
   // 效果被附着到角色上时，此函数会被调用，可以用于注册各种监听器
-  onApply (ctx) {
+  onApply (ctx, target) {
     
   }
   // 效果被移除时，此函数会被调用，可以用于删除各种监听器
-  onRemove (ctx) {
+  onRemove (ctx, target) {
 
   }
 
@@ -57,6 +58,7 @@ export class Effect {
 // 角色状态类，玩家角色和敌对角色共有的状态
 export class CharacterState {
   constructor() {
+    this.name = '未命名角色'; // 角色名称，用于显示在日志中
     this.maxAP = 4; // 最大行动点
     this.maxHP = 50; // 最大生命值
     this.currentHP = this.maxHP; // 当前生命值
@@ -74,6 +76,7 @@ export class CharacterState {
 export class PlayerState extends CharacterState {
   constructor() {
     super();
+    this.name = 'Player';
     this.cards = []; // 卡牌列表
     this.currentJin = 0; // 当前金灵气数量
     this.currentMu  = 0; // 当前木灵气数量
@@ -83,9 +86,103 @@ export class PlayerState extends CharacterState {
     this.currentHun  = 0; // 当前杂灵气数量
     this.dantianAura = 100; // 丹田中可以产出的灵气数量
     this.maxPendingActivation = 3; // 最大的未决发动次数
+    this.activationCount = 0; // 当前的未决发动次数
+    this.isPlayer = true; // 是否是玩家
   }
   currentAuraSum() {
     return this.currentJin + this.currentMu + this.currentShui + this.currentHuo + this.currentTu + this.currentHun;
+  }
+}
+
+// 敌对角色类，现在也继承自PlayerState
+export class EnemyState extends PlayerState {
+  constructor() {
+    super();
+    this.name = 'Enemy';
+    this.isPlayer = false; // 标记为敌对角色
+    this.aiType = "basic"; // 敌对角色的AI类型，可以在Enemies.js中定义不同的AI
+    this.preferActivation = 0.7; // 倾向于发动卡牌的概率
+    this.actionDelay = 1000; // AI行动的延迟时间（毫秒）
+  }
+  
+  // 基础AI逻辑框架，在Enemies.js中可以覆盖这些方法
+  async decideAction(ctx) {
+    // 卡牌AI决策逻辑，返回决策后的行动类型和参数
+    let action = "none";
+    
+    // 简单AI：有行动点就用，优先发动，其次运气
+    while (this.currentAP > 0) {
+      // 每次操作前等待一定时间
+      await new Promise(resolve => setTimeout(resolve, this.actionDelay));
+      
+      // 看看是发动还是运气
+      const shouldActivate = Math.random() < this.preferActivation && 
+                            this.cards[0].getCanActivate(ctx, this) &&
+                            this.activationCount < this.maxPendingActivation;
+      
+      if (shouldActivate) {
+        // 尝试发动卡牌
+        const success = ctx.activation(this);
+        if (!success) {
+          // 如果发动失败，执行运气
+          ctx.cultivation(this);
+        }
+        action = "used_card";
+      } else {
+        // 执行运气
+        ctx.cultivation(this);
+        action = "used_card";
+      }
+    }
+    
+    // 当行动点耗尽时，主动结束回合
+    await new Promise(resolve => setTimeout(resolve, this.actionDelay));
+    ctx.endTurn(this);
+    
+    return action;
+  }
+  
+  executeAction(ctx, actionType) {
+    // 不需要额外执行，decideAction已经执行了card相关操作
+    if (actionType !== "used_card") {
+      // 只有当不是卡牌操作时才执行老的AI逻辑（兼容）
+      switch(actionType) {
+        case "attack":
+          this.basicAttack(ctx);
+          break;
+        case "defend":
+          this.basicDefend(ctx);
+          break;
+        case "heal":
+          this.basicHeal(ctx);
+          break;
+        case "charge":
+          this.basicCharge(ctx);
+          break;
+      }
+    }
+  }
+  
+  // 保留简单AI的基础攻击、防御、治疗、聚气逻辑以备不时之需
+  basicAttack(ctx) {
+    const damage = this.computedAttack;
+    ctx.launchAttackTo(this, ctx.player, damage);
+  }
+  
+  basicDefend(ctx) {
+    ctx.getDefence(this, this.baseDefense * 0.5);
+    ctx.addLog(this, '增强了防御。');
+  }
+  
+  basicHeal(ctx) {
+    this.currentHP = Math.min(this.currentHP + this.maxHP * 0.1, this.maxHP);
+    ctx.addLog(this, '恢复了一些生命值。');
+  }
+  
+  basicCharge(ctx) {
+    this.baseAttack += 1;
+    this.baseDefense += 1;
+    ctx.addLog(this, '聚集了力量，基础属性永久提升。');
   }
 }
 
@@ -106,46 +203,49 @@ export class AttackContext {
 export class GameContext {
     constructor() {
       this.player = new PlayerState(); // 玩家角色
-      this.enemy = new CharacterState(); // 敌对角色
+      this.enemy = new EnemyState(); // 敌对角色，现在是EnemyState类型
       this.round = 0; // 当前回合数
       this.roundActor = RoundActorType.Player; // 当前回合的行动方
       this.roundPhase = RoundPhaseType.Start; // 当前回合阶段
 
-      this.playerActivationCount = 0; // 玩家发动当前排头卡牌发动了几次连续（按了几次k）
+      this.subject = this.player; // 当前主体，可以是player或enemy
+      // 删除playerActivationCount，替换为通用的activationCount
 
-      this.logs = []; // <--- 新增：游戏日志数组
+      this.logs = []; // 游戏日志数组
 
-      this.playerStartPhaseHooks = []; // 玩家回合开始阶段的钩子函数列表
-      this.playerActionPhaseHooks = []; // 玩家回合行动阶段的钩子函数列表
-      this.playerEndPhaseHooks = []; // 玩家回合结束阶段的钩子函数列表
-      this.enemyStartPhaseHooks = []; // 敌人回合开始阶段的钩子函数列表
-      this.enemyActionPhaseHooks = []; // 敌人回合行动阶段的钩子函数列表
-      this.enemyEndPhaseHooks = []; // 敌人回合结束阶段的钩子函数列表
+      // 将钩子改为通用形式，每个单位有自己的钩子
+      this.startPhaseHooks = new Map(); // 回合开始阶段的钩子函数列表
+      this.actionPhaseHooks = new Map(); // 回合行动阶段的钩子函数列表
+      this.endPhaseHooks = new Map(); // 回合结束阶段的钩子函数列表
 
       this.onAttackHooks = []; // 攻击时的钩子函数列表，额外输入：攻击上下文
       this.onDamageHooks = []; // 受到伤害时的钩子函数列表，额外输入：攻击者、被攻击者、造成的伤害
 
       this.globals = {}; // 全局变量
+      
+      // 初始化钩子映射
+      this.startPhaseHooks.set(this.player, []);
+      this.startPhaseHooks.set(this.enemy, []);
+      this.actionPhaseHooks.set(this.player, []);
+      this.actionPhaseHooks.set(this.enemy, []);
+      this.endPhaseHooks.set(this.player, []);
+      this.endPhaseHooks.set(this.enemy, []);
     }
 
-
-    triggerPlayerStartPhaseHooks() {
-      this.playerStartPhaseHooks.forEach(hook => hook(this));
+    // 重构钩子触发函数
+    triggerStartPhaseHooks(actor) {
+      const hooks = this.startPhaseHooks.get(actor) || [];
+      hooks.forEach(hook => hook(this));
     }
-    triggerPlayerActionPhaseHooks() {
-      this.playerActionPhaseHooks.forEach(hook => hook(this));
+    
+    triggerActionPhaseHooks(actor) {
+      const hooks = this.actionPhaseHooks.get(actor) || [];
+      hooks.forEach(hook => hook(this));
     }
-    triggerPlayerEndPhaseHooks() {
-      this.playerEndPhaseHooks.forEach(hook => hook(this));
-    }
-    triggerEnemyStartPhaseHooks() {
-      this.enemyStartPhaseHooks.forEach(hook => hook(this));
-    }
-    triggerEnemyActionPhaseHooks() {
-      this.enemyActionPhaseHooks.forEach(hook => hook(this));
-    }
-    triggerEnemyEndPhaseHooks() {
-      this.enemyEndPhaseHooks.forEach(hook => hook(this));
+    
+    triggerEndPhaseHooks(actor) {
+      const hooks = this.endPhaseHooks.get(actor) || [];
+      hooks.forEach(hook => hook(this));
     }
 
     triggerOnAttackHooks(ctx) {
@@ -156,7 +256,9 @@ export class GameContext {
     }
 
     addLog(actor, action) {
-      this.logs.push({ actor, action, timestamp: new Date() });
+      // Actor can be a string (for backward compatibility) or a CharacterState object
+      const actorName = typeof actor === 'string' ? actor : actor.name;
+      this.logs.push({ actor: actorName, action, timestamp: new Date() });
       if (this.logs.length > 100) { // Keep the log size manageable
         this.logs.shift();
       }
@@ -167,10 +269,13 @@ export class GameContext {
     // 增加效果
     // @param {CharacterState} target - 目标角色  
     // @param {Effect} effect - 效果
-    addEffect(target, effect) {
+    // @param {CharacterState} source - 效果来源（可选）
+    addEffect(target, effect, source = null) {
+      effect.owner = source || this.subject;
       target.activeEffects.push(effect);
-      effect.onApply(this);
-      if(effect.shouldDisplay) this.addLog(target === this.player ? 'Player' : 'Enemy', `获得了效果 ${effect.name}。`);
+      effect.onApply(this, target);
+      
+      if(effect.shouldDisplay) this.addLog(target, `获得了效果 ${effect.name}。`);
     }
 
     // 移除效果
@@ -180,11 +285,11 @@ export class GameContext {
       const index = target.activeEffects.indexOf(effect);
       if (index > -1) {
         target.activeEffects.splice(index, 1);
-        effect.onRemove(this);
-        if(effect.shouldDisplay) this.addLog(target === this.player ? 'Player' : 'Enemy', `失去了效果 ${effect.name}。`);
+        effect.onRemove(this, target);
+        
+        if(effect.shouldDisplay) this.addLog(target, `失去了效果 ${effect.name}。`);
       }
     }
-
 
     // 造成伤害
     // @param {CharacterState} source - 伤害来源
@@ -201,7 +306,8 @@ export class GameContext {
       var final_damage = attack_context.getDamage();
       this.triggerOnDamageHooks(attack_context.attacker, attack_context.defender, final_damage);
       target.currentHP -= final_damage;
-      this.addLog(source === this.player ? 'Player' : 'Enemy', `对 ${target === this.player ? 'Player' : 'Enemy'} 造成 ${final_damage.toFixed(2)} 伤害。`);
+      
+      this.addLog(source, `对 ${target.name} 造成 ${final_damage.toFixed(2)} 伤害。`);
     }
 
     // 防御数值变更
@@ -209,9 +315,8 @@ export class GameContext {
     // @param {number} delta - 防御数值delta
     getDefence(target, delta) {
       target.computedDefense += delta;
-      const actorName = target === this.player ? 'Player' : 'Enemy';
       const actionVerb = delta > 0 ? '增加' : '减少';
-      this.addLog(actorName, `${actionVerb}了 ${Math.abs(delta)} 防御力。`);
+      this.addLog(target, `${actionVerb}了 ${Math.abs(delta)} 防御力。`);
     }
 
     // 消耗行动点
@@ -220,185 +325,256 @@ export class GameContext {
     }
 
     // 消耗丹田储量（一般用于生成灵气）
-    consumeDantianStorage(delta) {
-      if(this.player.dantianAura < delta) return false;
-      this.player.dantianAura -= delta;
-      this.player.dantianAura = Math.max(this.player.dantianAura, 0);
+    consumeDantianStorage(character, delta) {
+      if(character.dantianAura < delta) return false;
+      character.dantianAura -= delta;
+      character.dantianAura = Math.max(character.dantianAura, 0);
       return true;
     }
 
     // 产出灵气
+    // @param {PlayerState} character - 获得灵气的角色
     // @param {string} type - 灵气类型
     // @param {number} delta - 灵气数量
-    produceAura(type, delta) {
+    produceAura(character, type, delta) {
       switch(type) {
         case '金':
         case 'jin':
         case 'Jin':
-          this.player.currentJin += delta;
+          character.currentJin += delta;
           break;
         case '木':
         case 'mu':
         case 'Mu':
-          this.player.currentMu += delta;
+          character.currentMu += delta;
           break;
         case '水':
         case 'shui':
         case 'Shui':
-          this.player.currentShui += delta;
+          character.currentShui += delta;
           break;
         case '火':
         case 'huo':
         case 'Huo':
-          this.player.currentHuo += delta;
+          character.currentHuo += delta;
           break;
         case '土':
         case 'tu':
         case 'Tu':
-          this.player.currentTu += delta;
+          character.currentTu += delta;
           break;
         case '杂':
         case 'hun':
         case 'Hun':
-          this.player.currentHun += delta;
+          character.currentHun += delta;
           break;
       }
       return true;
     }
 
     // 消耗灵气
+    // @param {PlayerState} character - 消耗灵气的角色
     // @param {string} type - 灵气类型
     // @param {number} delta - 灵气数量
-    consumeAura(type, delta) {
+    consumeAura(character, type, delta) {
       switch(type) {
         case '金':
         case 'jin':
         case 'Jin':
-          this.player.currentJin -= delta;
+          character.currentJin -= delta;
           break;
         case '木':
         case 'mu':
         case 'Mu':
-          this.player.currentMu -= delta;
+          character.currentMu -= delta;
           break;
         case '水':
         case 'shui':
         case 'Shui':
-          this.player.currentShui -= delta;
+          character.currentShui -= delta;
           break;
         case '火':
         case 'huo':
         case 'Huo':
-          this.player.currentHuo -= delta;
+          character.currentHuo -= delta;
           break;
         case '土':
         case 'tu':
         case 'Tu':
-          this.player.currentTu -= delta;
+          character.currentTu -= delta;
           break;
         case '杂':
         case 'hun':
         case 'Hun':
-          this.player.currentHun -= delta;
+          character.currentHun -= delta;
           break;
       }
       return true;
     }
 
     // 结束回合
-    endPhase () {
-      this.roundPhase = RoundPhaseType.End;
-      if (this.roundActor === RoundActorType.Player) {
-        this.tryActivatePendingActivation();
-
-        
-        this.addLog('Player', '结束回合。');
-        this.triggerPlayerEndPhaseHooks();
-        this.player.currentAP = 0;
-
-        this.triggerEnemyStartPhaseHooks();
-        this.roundActor = RoundActorType.Enemy;
-        this.roundPhase = RoundPhaseType.Start;
-        
-        // TODO 现在敌人没行动AI，目前以endphase直接跳过。
-        this.endPhase();
-      } else {
-        this.addLog('Enemy', '结束回合。');
-        this.triggerEnemyEndPhaseHooks();
-        this.round++;
-
-        this.player.currentAP = this.player.maxAP;
-        this.triggerPlayerStartPhaseHooks();
-        this.roundActor = RoundActorType.Player;
-        this.roundPhase = RoundPhaseType.Start;
+    async endPhase () {
+      if(this.roundPhase === RoundPhaseType.End) {
+        // 可能在一个递归之中，不要继续反复结束回合了。
+        return;
       }
+      
+      if (this.roundActor === RoundActorType.Player) {
+        this.endPlayerTurn();
+      } else {
+        this.endEnemyTurn();
+      }
+    }
+
+    // 开始玩家回合
+    startPlayerTurn() {
+      this.subject = this.player;
+      this.player.currentAP = this.player.maxAP;
+      this.roundActor = RoundActorType.Player;
+      this.roundPhase = RoundPhaseType.Start;
+      this.triggerStartPhaseHooks(this.player);
+      this.roundPhase = RoundPhaseType.Action; // 进入行动阶段
+    }
+
+    // 结束玩家回合
+    endPlayerTurn() {
+      this.roundPhase = RoundPhaseType.End;
+      this.tryActivatePendingActivation(this.player);
+      this.addLog(this.player, '结束回合。');
+      this.triggerEndPhaseHooks(this.player);
+      this.player.currentAP = 0;
+      this.startEnemyTurn(); // 玩家回合结束后开始敌人回合
+    }
+
+    // 开始敌人回合
+    async startEnemyTurn() {
+      this.subject = this.enemy;
+      this.roundActor = RoundActorType.Enemy;
+      this.roundPhase = RoundPhaseType.Start;
+      this.triggerStartPhaseHooks(this.enemy);
+      this.roundPhase = RoundPhaseType.Action;
+      
+      // 敌人回合开始，补充行动点
+      this.enemy.currentAP = this.enemy.maxAP;
+      
+      // 执行AI决策
+      const action = await this.enemy.decideAction(this);
+      // 由于decideAction已经执行了卡牌操作和结束回合，不需要在这里结束回合
+      // this.endEnemyTurn(); // 删除这一行，让AI自己决定何时结束回合
+    }
+
+    // 结束敌人回合
+    endEnemyTurn() {
+      this.roundPhase = RoundPhaseType.End;
+      this.addLog(this.enemy, '结束回合。');
+      this.triggerEndPhaseHooks(this.enemy);
+      this.round++; // 回合数+1
+      this.startPlayerTurn(); // 敌人回合结束后开始玩家回合
     }
 
     // 如果当前有没有发动但已经按下的卡牌，尝试发动
-    tryActivatePendingActivation() {
-      if(this.playerActivationCount > 0) {
-        // console.log(this.player.cards);
-        const cardName = this.player.cards[0].name;
-        this.addLog('Player', `发动了 ${this.playerActivationCount} 重 ${cardName}。`);
-        this.player.cards[0].activationEffect(this);
-        this.playerActivationCount = 0;
+    tryActivatePendingActivation(character) {
+      if(character.activationCount > 0 && character.cards.length > 0) {
+        const cardName = character.cards[0].name;
+        this.addLog(character, `发动了 ${character.activationCount} 重 ${cardName}。`);
+        character.cards[0].activationEffect(this, character);
+        character.activationCount = 0;
       }
     }
 
-    // 玩家操作函数，用于UI调用
+    // 通用操作函数，用于UI和AI调用
     
-    // 玩家选择运气
-    playerCultivation() {
-      // 如果行动点不足，结束回合
-      if (this.player.currentAP <= 0) {
-        this.endPhase();
-        return; // Added return to prevent further execution
+    // 运气
+    cultivation(character) {
+      // 如果行动点不足，不能继续运气
+      if (character.currentAP <= 0) {
+        return false; // 返回false表示操作失败
       }
-      this.tryActivatePendingActivation();
-      this.player.cards[0].cultivationEffect(this);
+      
+      this.tryActivatePendingActivation(character);
+      character.cards[0].cultivationEffect(this, character);
       // 把排头的卡牌移动到末尾
-      const shiftedCard = this.player.cards.shift();
+      const shiftedCard = character.cards.shift();
       if (shiftedCard) {
-        this.player.cards.push(shiftedCard);
-        this.addLog('Player', `运气 ${shiftedCard.name}。`);
+        character.cards.push(shiftedCard);
+        this.addLog(character, `运气 ${shiftedCard.name}。`);
       }
       // 消耗一个行动点
-      this.consumeAP(this.player, this.player.cards[0].cultivationAPCost);
-      // 如果行动点不足，结束回合
-      if (this.player.currentAP <= 0) {
-        this.endPhase();
-      }
+      this.consumeAP(character, character.cards[0].cultivationAPCost);
+      return true; // 返回true表示操作成功
     }
 
-    // 玩家选择发动
-    playerActivation() {
-      // 如果行动点不足，结束回合
-      if (this.player.currentAP <= 0) {
-        this.endPhase();
-        return false; // Added return to prevent further execution
+    // 发动
+    activation(character) {
+      // 如果行动点不足，不能继续发动
+      if (character.currentAP <= 0) {
+        return false; // 返回false表示操作失败
       }
+      
       // 如果超过最大pendingActivation，啥都不干，返回false
-      if (this.playerActivationCount + 1 > this.player.maxPendingActivation) {
+      if (character.activationCount + 1 > character.maxPendingActivation) {
         return false;
       }
       // 如果卡牌不可发动，啥都不干，返回false
-      if (this.player.cards[0].getCanActivate(this) == false) {
+      if (character.cards[0].getCanActivate(this, character) == false) {
         return false;
       }
       // 如果超过卡牌maxPendingActivation，返回false
-      if (this.playerActivationCount + 1 > this.player.cards[0].maxPendingActivation) {
+      if (character.activationCount + 1 > character.cards[0].maxPendingActivation) {
         return false;
       }
-      this.playerActivationCount ++;
-      this.addLog('Player', `准备发动 ${this.player.cards[0].name} (当前 ${this.playerActivationCount} 重)。`);
+      character.activationCount++;
+      this.addLog(character, `准备发动 ${character.cards[0].name} (当前 ${character.activationCount} 重)。`);
       // 消耗行动点
-      this.consumeAP(this.player, this.player.cards[0].activationAPCost);
-      console.log(this.player);
-      // 如果行动点不足，结束回合
-      if (this.player.currentAP <= 0) {
-        this.endPhase();
+      this.consumeAP(character, character.cards[0].activationAPCost);
+      return true; // 返回true表示操作成功
+    }
+    
+    // 结束回合 - 新增的独立操作
+    endTurn(character) {
+      // 只有在行动点耗尽时才能结束回合
+      if (character.currentAP > 0) {
+        this.addLog(character, `还有行动点，不能结束回合。`);
+        return false; // 返回false表示操作失败
       }
-      return true;
+      
+      // 调用内部的结束回合逻辑
+      this.endPhase();
+      return true; // 返回true表示操作成功
+    }
+    
+    // 检查是否是玩家回合并允许操作
+    canPlayerAct() {
+      return this.roundActor === RoundActorType.Player && this.roundPhase === RoundPhaseType.Action;
+    }
+
+    // 保留原始的玩家操作函数作为便捷方法
+    playerCultivation() {
+      // 添加检查，仅在玩家回合时允许操作
+      if (!this.canPlayerAct()) {
+        console.log("现在不是玩家回合，无法操作");
+        return false;
+      }
+      return this.cultivation(this.player);
+    }
+    
+    playerActivation() {
+      // 添加检查，仅在玩家回合时允许操作
+      if (!this.canPlayerAct()) {
+        console.log("现在不是玩家回合，无法操作");
+        return false;
+      }
+      return this.activation(this.player);
+    }
+    
+    // 新增玩家结束回合便捷方法
+    playerEndTurn() {
+      // 添加检查，仅在玩家回合时允许操作
+      if (!this.canPlayerAct()) {
+        console.log("现在不是玩家回合，无法操作");
+        return false;
+      }
+      return this.endTurn(this.player);
     }
 };
 
@@ -411,55 +587,60 @@ export class CardBase {
     this.activationAPCost = 1; // 发动的行动点消耗
     this.subtitle = ''; // 简短描述卡牌所运功夫所属种类，用略小号字体显示在名称下方
     this.maxPendingActivation = 999; // 最大pending发动次数
+    this.owner = null; // 卡牌所有者
   }
   // 卡牌的运气效果
   // @param {GameContext} ctx - 游戏上下文
-  cultivationEffect(ctx) {
+  // @param {PlayerState} owner - 卡牌所有者
+  cultivationEffect(ctx, owner) {
     // 卡牌的运气效果
     // 可以根据卡牌的具体实现来定义
   }
   // 卡牌的发动效果
   // @param {GameContext} ctx - 游戏上下文
-  activationEffect(ctx) {
+  // @param {PlayerState} owner - 卡牌所有者
+  activationEffect(ctx, owner) {
     // 卡牌的发动效果
     // 可以根据卡牌的具体实现来定义 
   }
   // 卡牌初始化时会被调用
   // @param {GameContext} ctx - 游戏上下文
-  init(ctx) {
-    
+  // @param {PlayerState} owner - 卡牌所有者
+  init(ctx, owner) {
+    this.owner = owner;
   }
   // 卡牌被移除时会被调用
   // @param {GameContext} ctx - 游戏上下文
-  remove(ctx) {
+  // @param {PlayerState} owner - 卡牌所有者
+  remove(ctx, owner) {
     
   }
 
   // 卡牌发动效果描述
-  getDescription(ctx) {
+  getDescription(ctx, owner) {
     return "";
   }
   // 卡牌运气效果描述
-  getPassiveDescription(ctx) {
+  getPassiveDescription(ctx, owner) {
     return ""; // Default: no passive description
   }
 
   // 特殊效果，用于UI视觉展示
-  getCardMajorColor(ctx) {
+  getCardMajorColor(ctx, owner) {
     return "#f0f0f0"; // Default light gray
   }
-  getMinorColor(ctx) {
+  getMinorColor(ctx, owner) {
     return "#cccccc"; // Default gray
   }
-  getDecorationColor(ctx) {
+  getDecorationColor(ctx, owner) {
     return "#aaaaaa"; // Default dark gray
   }
-  getDecorationType (ctx) {
+  getDecorationType (ctx, owner) {
     return "none"; // 'none', 'stripe', 'corner'
   }
 
   // 逻辑判断
-  getCanActivate(ctx) {
+  getCanActivate(ctx, owner) {
     return true; // Default to true, can be overridden in subclasses
   }
 }

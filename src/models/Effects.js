@@ -1,4 +1,3 @@
-
 import { CardBase, Effect, EffectType } from './Game.js';
 
 
@@ -15,19 +14,21 @@ import { CardBase, Effect, EffectType } from './Game.js';
       this.amount = amount; // 防御力增加值
       // this.description = `在 ${this.rounds} 回合内，增加 ${this.amount.toFixed(0)} 防御力。`; // Set in getDescription for dynamic round count
     }
-    onApply(ctx) {
-      ctx.getDefence(ctx.player, this.amount);
+    onApply(ctx, target) {
+      ctx.getDefence(target, this.amount);
       // 注册一个钩子函数，在回合结束时减少rounds数
       const hook = () => {
         this.rounds--;
         if (this.rounds <= 0) {
-          ctx.removeEffect(ctx.player, this);
+          ctx.removeEffect(target, this);
         }
       };
-      ctx.playerEndPhaseHooks.push(hook);
+      const hooks = ctx.endPhaseHooks.get(target) || [];
+      hooks.push(hook);
+      ctx.endPhaseHooks.set(target, hooks);
     }
-    onRemove(ctx) {
-      ctx.getDefence(ctx.player, -this.amount);
+    onRemove(ctx, target) {
+      ctx.getDefence(target, -this.amount);
     }
     getDescription(ctx) {
       return `在 ${this.rounds} 回合内，增加 ${this.amount.toFixed(0)} 防御力。`;
@@ -47,24 +48,23 @@ export class YingChengAfterEffect extends Effect {
             atk_ctx.currentDamage = Math.floor(atk_ctx.currentDamage * 1.5);
         }
     }
-    onApply(ctx) {
-        ctx.onDamageHooks.push()
+    onApply(ctx, target) {
         // 注册钩子函数
       const hook_rounds = () => {
         this.rounds--;
         if (this.rounds <= 0) {
-          ctx.removeEffect(ctx.player, this);
+          ctx.removeEffect(target, this);
         }
       };
-        ctx.playerEndPhaseHooks.push(hook_rounds);
+        const hooks = ctx.endPhaseHooks.get(target) || [];
+        hooks.push(hook_rounds);
+        ctx.endPhaseHooks.set(target, hooks);
         ctx.onAttackHooks.push(this.hook_increase);
     }
-    onRemove(ctx) {
+    onRemove(ctx, target) {
         ctx.onAttackHooks = ctx.onAttackHooks.filter(hook => hook !== this.hook_increase);
-        ctx.addEffect(new YingChengAfterEffect());
-        ctx.addLog('Player', `硬撑效果结束。`);
     }
-    getDescription (ctx) {
+    getDescription(ctx) {
         return `受到伤害增加50%`;
     }
 }
@@ -80,24 +80,24 @@ export class YingChengEffect extends Effect {
             atk_ctx.currentDamage = Math.floor(atk_ctx.currentDamage * 0.5);
         }
     }
-    getDescription (ctx) {
-        return `减伤50%，下下回合受伤害增伤50%`;
+    getDescription(ctx) {
+        return `减伤50%，下${this.rounds == 1 ? '' : '下' }回合受伤害增伤50%`;
     }
-    onApply(ctx) {
-        ctx.onDamageHooks.push()
+    onApply(ctx, target) {
         // 注册钩子函数
       const hook_rounds = () => {
         this.rounds--;
         if (this.rounds <= 0) {
-          ctx.removeEffect(ctx.player, this);
+          ctx.removeEffect(target, this);
         }
       };
-        ctx.playerEndPhaseHooks.push(hook_rounds);
+        const hooks = ctx.endPhaseHooks.get(target) || [];
+        hooks.push(hook_rounds);
+        ctx.endPhaseHooks.set(target, hooks);
         ctx.onAttackHooks.push(this.hook_decrease);
     }
-    onRemove(ctx) {
-        console.log("remove hook");
+    onRemove(ctx, target) {
         ctx.onAttackHooks = ctx.onAttackHooks.filter(hook => hook !== this.hook_decrease);
-        ctx.addEffect(ctx.player, new YingChengAfterEffect());
+        ctx.addEffect(target, new YingChengAfterEffect(), this.owner);
     }
 }

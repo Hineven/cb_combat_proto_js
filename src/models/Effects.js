@@ -1,0 +1,103 @@
+
+import { CardBase, Effect, EffectType } from './Game.js';
+
+
+// 具体的效果类，继承自效果类，定义了具体的效果类型和行为
+
+
+  export class TemporaryDefenceEffect extends Effect {
+    constructor(rounds, amount) {
+      super();
+      this.name = '临时防御';
+      this.name_tag = '防';
+      this.color = '#6495ED'; // Cornflower Blue
+      this.rounds = rounds; // 持续回合数
+      this.amount = amount; // 防御力增加值
+      // this.description = `在 ${this.rounds} 回合内，增加 ${this.amount.toFixed(0)} 防御力。`; // Set in getDescription for dynamic round count
+    }
+    onApply(ctx) {
+      ctx.getDefence(ctx.player, this.amount);
+      // 注册一个钩子函数，在回合结束时减少rounds数
+      const hook = () => {
+        this.rounds--;
+        if (this.rounds <= 0) {
+          ctx.removeEffect(ctx.player, this);
+        }
+      };
+      ctx.playerEndPhaseHooks.push(hook);
+    }
+    onRemove(ctx) {
+      ctx.getDefence(ctx.player, -this.amount);
+    }
+    getDescription(ctx) {
+      return `在 ${this.rounds} 回合内，增加 ${this.amount.toFixed(0)} 防御力。`;
+    }
+  }
+  
+// 硬撑，下回合减伤50%，下下回合增伤50%
+export class YingChengAfterEffect extends Effect {
+    constructor() {
+        super();
+        this.name = '硬撑';
+        this.name_tag = '撑';
+        this.color = '#FF6347'; // Tomato
+        this.type = EffectType.Debuff;
+        this.rounds = 2; // 持续回合数
+        this.hook_increase = (atk_ctx) => {
+            atk_ctx.currentDamage = Math.floor(atk_ctx.currentDamage * 1.5);
+        }
+    }
+    onApply(ctx) {
+        ctx.onDamageHooks.push()
+        // 注册钩子函数
+      const hook_rounds = () => {
+        this.rounds--;
+        if (this.rounds <= 0) {
+          ctx.removeEffect(ctx.player, this);
+        }
+      };
+        ctx.playerEndPhaseHooks.push(hook_rounds);
+        ctx.onAttackHooks.push(this.hook_increase);
+    }
+    onRemove(ctx) {
+        ctx.onAttackHooks = ctx.onAttackHooks.filter(hook => hook !== this.hook_increase);
+        ctx.addEffect(new YingChengAfterEffect());
+        ctx.addLog('Player', `硬撑效果结束。`);
+    }
+    getDescription (ctx) {
+        return `受到伤害增加50%`;
+    }
+}
+
+export class YingChengEffect extends Effect {
+    constructor() {
+        super();
+        this.name = '硬撑';
+        this.name_tag = '撑';
+        this.color = '#FF6347'; // Tomato
+        this.rounds = 2; // 持续回合数
+        this.hook_decrease = (atk_ctx) => {
+            atk_ctx.currentDamage = Math.floor(atk_ctx.currentDamage * 0.5);
+        }
+    }
+    getDescription (ctx) {
+        return `减伤50%，下下回合受伤害增伤50%`;
+    }
+    onApply(ctx) {
+        ctx.onDamageHooks.push()
+        // 注册钩子函数
+      const hook_rounds = () => {
+        this.rounds--;
+        if (this.rounds <= 0) {
+          ctx.removeEffect(ctx.player, this);
+        }
+      };
+        ctx.playerEndPhaseHooks.push(hook_rounds);
+        ctx.onAttackHooks.push(this.hook_decrease);
+    }
+    onRemove(ctx) {
+        console.log("remove hook");
+        ctx.onAttackHooks = ctx.onAttackHooks.filter(hook => hook !== this.hook_decrease);
+        ctx.addEffect(ctx.player, new YingChengAfterEffect());
+    }
+}

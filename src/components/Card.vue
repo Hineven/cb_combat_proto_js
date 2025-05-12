@@ -1,5 +1,5 @@
 <template>
-  <div 
+  <div v-if="card"
     class="card"
     :class=" [
       { 'card-highlight': isHighlighted },

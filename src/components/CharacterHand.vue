@@ -13,15 +13,15 @@
     </div>
 
     <div class="cards-row-wrapper">
-      <div v-if="!isPlayerControlled && characterCards.length === 0" class="no-cards-enemy">
+      <div v-if="!isPlayerControlled && characterCardSlots.length === 0" class="no-cards-enemy">
         <!-- No specific message for enemy with no cards, or a subtle indicator -->
       </div>
       <div class="cards-row">
         <Card
-          v-for="(card, index) in characterCards"
-          :key="index"
-          :card="card"
-          :is-first-card="isPlayerControlled && index === 0" 
+          v-for="(slot, index) in characterCardSlots"
+          :key="index" 
+          :card="slot.card" 
+          :is-first-card="isPlayerControlled && index === 0"
           :activation-count="isPlayerControlled && index === 0 ? characterActivationCount : 0"
           :special-effect="isPlayerControlled && index === 0 ? firstCardSpecialEffect : ''"
           :owner="character"
@@ -75,8 +75,8 @@ const props = defineProps({
 
 const emit = defineEmits(['end-turn']);
 
-// Use computed properties to react to changes in the character prop
-const characterCards = computed(() => props.character?.cards || []);
+// Update to use cardSlots
+const characterCardSlots = computed(() => props.character?.cardSlots || []);
 const characterCurrentAP = computed(() => props.character?.currentAP || 0);
 const characterMaxAP = computed(() => props.character?.maxAP || 0);
 const characterActivationCount = computed(() => props.character?.activationCount || 0);

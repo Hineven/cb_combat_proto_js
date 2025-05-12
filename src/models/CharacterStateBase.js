@@ -1,3 +1,4 @@
+import {CardSlot} from './CardBase.js';
 // 角色状态类，玩家角色和敌对角色共有的状态
 export class CharacterState {
   constructor() {
@@ -16,11 +17,11 @@ export class CharacterState {
 }
 
 // 玩家角色类，继承自角色状态类，添加了卡牌相关属性和方法，以及一些用于发动卡牌的资源
-export class PlayerState extends CharacterState {
+export class PlayingCharacterState extends CharacterState {
   constructor() {
     super();
     this.name = 'Player';
-    this.cards = []; // 卡牌列表
+    this.cardSlots = [new CardSlot(), new CardSlot(), new CardSlot()]; // 卡槽列表，默认3个空卡槽
     this.currentJin = 0; // 当前金灵气数量
     this.currentMu  = 0; // 当前木灵气数量
     this.currentShui = 0; // 当前水灵气数量
@@ -37,8 +38,8 @@ export class PlayerState extends CharacterState {
   }
 }
 
-// 敌对角色类，现在也继承自PlayerState
-export class EnemyState extends PlayerState {
+// 敌对角色类，现在也继承自PlayingCharacterState
+export class EnemyState extends PlayingCharacterState {
   constructor() {
     super();
     this.name = 'Enemy';
@@ -59,22 +60,30 @@ export class EnemyState extends PlayerState {
       await new Promise(resolve => setTimeout(resolve, this.actionDelay));
       
       // 看看是发动还是运气
+      const firstSlot = this.cardSlots.length > 0 ? this.cardSlots[0] : null;
+      const canActivateCard = firstSlot && !firstSlot.isEmpty() && firstSlot.card.getCanActivate(ctx, this);
+
       const shouldActivate = Math.random() < this.preferActivation && 
-                            this.cards.length > 0 && // Ensure there are cards
-                            this.cards[0].getCanActivate(ctx, this) &&
+                            this.cardSlots.length > 0 && // Ensure there are card slots
+                            !firstSlot.isEmpty() && // Ensure the first slot is not empty
+                            canActivateCard &&
                             this.activationCount < this.maxPendingActivation;
       
       if (shouldActivate) {
         // 尝试发动卡牌
         const success = ctx.activation(this);
         if (!success) {
-          // 如果发动失败，执行运气
-          if (this.cards.length > 0) ctx.cultivation(this);
+          // 如果发动失败，执行运气 (前提是卡槽不为空)
+          if (this.cardSlots.length > 0 && !firstSlot.isEmpty()) ctx.cultivation(this);
+          else if (this.cardSlots.length > 0 && firstSlot.isEmpty()) {
+            // 如果是空卡槽，也执行一次“运气”来轮换，即使它没效果
+            ctx.cultivation(this);
+          }
         }
         action = "used_card";
       } else {
-        // 执行运气
-        if (this.cards.length > 0) ctx.cultivation(this);
+        // 执行运气 (即使是空卡槽也执行以轮换)
+        if (this.cardSlots.length > 0) ctx.cultivation(this);
         action = "used_card";
       }
     }

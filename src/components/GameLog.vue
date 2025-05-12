@@ -40,7 +40,7 @@ watch(() => props.logs, async () => {
 .game-log-container {
   width: 80%;
   max-width: 600px;
-  height: 50%; /* Adjust height as needed */
+  height: 100%; /* Allow GameLog to fill its parent container */
   background-color: rgba(0, 0, 0, 0.05);
   border: 1px solid #ccc;
   border-radius: 5px;
@@ -48,6 +48,8 @@ watch(() => props.logs, async () => {
   margin: 20px auto; /* Center it and provide some margin */
   display: flex;
   flex-direction: column;
+  flex: 1; /* Allow GameLog to grow within its parent */
+  overflow: hidden; /* Prevent GameLog from growing beyond its parent */
 }
 
 .game-log-container h4 {
@@ -58,10 +60,12 @@ watch(() => props.logs, async () => {
 }
 
 .log-entries {
-  flex-grow: 1;
+  max-height: 300px; /* Set a fixed maximum height */
   overflow-y: auto;
   font-size: 0.9em;
   line-height: 1.6;
+  flex: 1;
+  overflow-y: auto; /* Enable scrolling for log entries */
 }
 
 .log-entry {

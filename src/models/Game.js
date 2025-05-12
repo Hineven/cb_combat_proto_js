@@ -14,9 +14,9 @@
 //   触发钩子，执行一些卡牌可能注册过的特殊逻辑。
 //   清空行动点。
 
-import { PlayerState, EnemyState } from './CharacterStateBase.js';
+import { PlayingCharacterState, EnemyState } from './CharacterStateBase.js';
 import { Effect, EffectType } from './EffectBase.js'; 
-import { CardBase } from './CardBase.js'; 
+import { CardBase, CardSlot, EmptyCard } from './CardBase.js'; 
 
 export class AttackContext {
   constructor() {
@@ -55,7 +55,7 @@ export class RoundActorType {
 // 游戏上下文，用于协助卡牌读取游戏状态，以及执行逻辑
 export class GameContext {
     constructor() {
-      this.player = new PlayerState(); // 玩家角色
+      this.player = new PlayingCharacterState(); // 玩家角色
       this.enemy = new EnemyState(); // 敌对角色，现在是EnemyState类型
       this.round = 0; // 当前回合数
       this.roundActor = RoundActorType.Player; // 当前回合的行动方
@@ -282,7 +282,7 @@ export class GameContext {
     }
 
     // 产出灵气
-    // @param {PlayerState} character - 获得灵气的角色
+    // @param {PlayingCharacterState} character - 获得灵气的角色
     // @param {string} type - 灵气类型
     // @param {number} delta - 灵气数量
     produceAura(character, type, delta) {
@@ -322,7 +322,7 @@ export class GameContext {
     }
 
     // 消耗灵气
-    // @param {PlayerState} character - 消耗灵气的角色
+    // @param {PlayingCharacterState} character - 消耗灵气的角色
     // @param {string} type - 灵气类型
     // @param {number} delta - 灵气数量
     consumeAura(character, type, delta) {
@@ -435,10 +435,10 @@ export class GameContext {
 
     // 如果当前有没有发动但已经按下的卡牌，尝试发动
     tryActivatePendingActivation(character) {
-      if(character.activationCount > 0 && character.cards.length > 0) {
-        const cardName = character.cards[0].name;
+      if(character.activationCount > 0 && character.cardSlots.length > 0 && !character.cardSlots[0].isEmpty()) {
+        const cardName = character.cardSlots[0].card.name;
         this.addLog(character, `发动了 ${character.activationCount} 重 ${cardName}。`);
-        character.cards[0].activationEffect(this, character);
+        character.cardSlots[0].card.activationEffect(this, character);
         character.activationCount = 0;
       }
     }
@@ -453,15 +453,23 @@ export class GameContext {
       }
       
       this.tryActivatePendingActivation(character);
-      character.cards[0].cultivationEffect(this, character);
-      // 把排头的卡牌移动到末尾
-      const shiftedCard = character.cards.shift();
-      if (shiftedCard) {
-        character.cards.push(shiftedCard);
-        this.addLog(character, `运气 ${shiftedCard.name}。`);
+      if (character.cardSlots.length > 0) {
+        const firstSlot = character.cardSlots[0];
+        firstSlot.card.cultivationEffect(this, character);
+        // 把排头的卡槽移动到末尾
+        const shiftedSlot = character.cardSlots.shift();
+        if (shiftedSlot) {
+          character.cardSlots.push(shiftedSlot);
+          this.addLog(character, `运气 ${firstSlot.card.name}。`);
+        }
+        // 消耗一个行动点
+        this.consumeAP(character, firstSlot.card.cultivationAPCost);
+      } else {
+        // 没有卡槽，记录日志并消耗AP
+        this.addLog(character, `没有可运气的卡牌。`);
+        this.consumeAP(character, 1); // 假设没有卡牌时运气也消耗1AP
+        return false; // 操作实际未执行有效内容
       }
-      // 消耗一个行动点
-      this.consumeAP(character, character.cards[0].cultivationAPCost);
       return true; // 返回true表示操作成功
     }
 
@@ -472,22 +480,29 @@ export class GameContext {
         return false; // 返回false表示操作失败
       }
       
+      if (character.cardSlots.length === 0 || character.cardSlots[0].isEmpty()) {
+        // this.addLog(character, `首位卡槽为空，无法发动。`); // 可选日志
+        return false; // 没有卡牌或首位为空则不能发动
+      }
+
+      const firstSlotCard = character.cardSlots[0].card;
+
       // 如果超过最大pendingActivation，啥都不干，返回false
       if (character.activationCount + 1 > character.maxPendingActivation) {
         return false;
       }
       // 如果卡牌不可发动，啥都不干，返回false
-      if (character.cards[0].getCanActivate(this, character) == false) {
+      if (firstSlotCard.getCanActivate(this, character) == false) {
         return false;
       }
       // 如果超过卡牌maxPendingActivation，返回false
-      if (character.activationCount + 1 > character.cards[0].maxPendingActivation) {
+      if (character.activationCount + 1 > firstSlotCard.maxPendingActivation) {
         return false;
       }
       character.activationCount++;
-      this.addLog(character, `准备发动 ${character.cards[0].name} (当前 ${character.activationCount} 重)。`);
+      this.addLog(character, `准备发动 ${firstSlotCard.name} (当前 ${character.activationCount} 重)。`);
       // 消耗行动点
-      this.consumeAP(character, character.cards[0].activationAPCost);
+      this.consumeAP(character, firstSlotCard.activationAPCost);
       return true; // 返回true表示操作成功
     }
     

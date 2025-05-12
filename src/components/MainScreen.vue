@@ -1,41 +1,26 @@
 <template>
   <div class="main-screen">
-    <div class="battle-interface-container">
-      <div class="enemy-hand-wrapper">
-        <CharacterHand
-          :character="enemyState"
-          :is-player-controlled="false"
-          :current-feedback-class="enemyFeedbackClass"
-          :first-card-special-effect="enemyFirstCardSpecialEffect"
-        />
-      </div>
-
-      <div class="game-panels-container"> 
-        <div class="side-panel player-panel">
-          <CharacterStatus :character="playerState" title="玩家" />
-        </div>
-        <div class="center-panel">
-          <GameLog :logs="gameLogs" />
-        </div>
-        <div class="side-panel enemy-panel">
-          <CharacterStatus :character="enemyState" title="敌人" />
-        </div>
-        <!-- menu-sidebar was here -->
-      </div>
-
-      <div class="player-controls-wrapper">
-        <div v-if="!isPlayerTurn" class="turn-indicator">敌方回合</div>
-        <CharacterHand
-          :character="playerState"
-          :is-player-controlled="true"
-          :current-feedback-class="playerFeedbackClass"
-          :first-card-special-effect="playerFirstCardSpecialEffect"
-          :can-end-turn="canEndTurn"
-          @end-turn="handleEndTurn"
-        />
-      </div>
+    <div class="battle-interface-container" v-if="currentView === 'battle'">
+      <BattleScreen
+        :playerState="playerState"
+        :enemyState="enemyState"
+        :gameLogs="gameLogs"
+        :isPlayerTurn="isPlayerTurn"
+        :canEndTurn="canEndTurn"
+        :playerFeedbackClass="playerFeedbackClass"
+        :playerFirstCardSpecialEffect="playerFirstCardSpecialEffect"
+        :enemyFeedbackClass="enemyFeedbackClass"
+        :enemyFirstCardSpecialEffect="enemyFirstCardSpecialEffect"
+        @end-turn="handleEndTurn"
+      />
     </div>
+    <div class="card-config-container" v-else-if="currentView === 'cardConfig'">
+      <CardConfigScreen />
+    </div>
+
     <div class="menu-sidebar">
+      <button @click="navigateTo('battle')" :class="{ active: currentView === 'battle' }">战斗</button>
+      <button @click="navigateTo('cardConfig')" :class="{ active: currentView === 'cardConfig' }">卡牌配置</button>
       <!-- Menu content will go here -->
     </div>
   </div>
@@ -43,8 +28,10 @@
 
 <script setup>
 import CharacterStatus from './CharacterStatus.vue';
-import CharacterHand from './CharacterHand.vue'; // Import the new component
+import CharacterHand from './CharacterHand.vue';
 import GameLog from './GameLog.vue';
+import BattleScreen from './BattleScreen.vue'; // 新增
+import CardConfigScreen from './CardConfigScreen.vue'; // 新增
 import gameContext from '../models/DefaultGameSetup';
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 
@@ -53,6 +40,8 @@ const enemyState = ref(gameContext.enemy);
 const gameLogs = ref(gameContext.logs);
 const isPlayerTurn = ref(gameContext.canPlayerAct());
 const canEndTurn = ref(false);
+
+const currentView = ref('battle'); // 新增，控制当前显示的页面
 
 // Feedback related refs for player and enemy
 const playerFeedbackClass = ref('');
@@ -63,22 +52,16 @@ const enemyFirstCardSpecialEffect = ref(''); // For enemy card specific animatio
 let playerFeedbackTimeoutId = null;
 let enemyFeedbackTimeoutId = null; // Separate timeout for enemy
 
+const navigateTo = (viewName) => {
+  currentView.value = viewName;
+};
+
 const updateGameStatus = () => {
   playerState.value = { ...gameContext.player }; // Shallow clone to ensure reactivity for the object itself
   enemyState.value = { ...gameContext.enemy };   // Shallow clone for enemy
   gameLogs.value = [...gameContext.logs];
   isPlayerTurn.value = gameContext.canPlayerAct();
   canEndTurn.value = isPlayerTurn.value && gameContext.player.currentAP <= 0;
-  
-  // Potentially trigger enemy animation based on game state changes
-  // This is a placeholder for where you might decide to show enemy feedback
-  // For example, if an enemy effect activates or they play a card (if that becomes visible)
-  // if (gameContext.enemy.justPerformedAction) { 
-  //   applyEnemyFeedback('feedback-activate', 'activating');
-  //   gameContext.enemy.justPerformedAction = false; // Reset flag
-  // }
-
-  requestAnimationFrame(updateGameStatus);
 };
 
 const applyFeedback = (target, feedbackClass, cardEffect) => {
@@ -86,7 +69,8 @@ const applyFeedback = (target, feedbackClass, cardEffect) => {
     if (!isPlayerTurn.value && feedbackClass !== 'feedback-end-turn') return; // Allow end turn feedback even if turn ends
     if (playerFeedbackTimeoutId) clearTimeout(playerFeedbackTimeoutId);
     playerFeedbackClass.value = feedbackClass;
-    if (playerState.value.cards.length > 0) {
+    // 使用 cardSlots 替代 cards
+    if (playerState.value.cardSlots && playerState.value.cardSlots.length > 0) {
       playerFirstCardSpecialEffect.value = cardEffect;
     }
     playerFeedbackTimeoutId = setTimeout(() => {
@@ -98,7 +82,8 @@ const applyFeedback = (target, feedbackClass, cardEffect) => {
     // Logic for applying feedback to enemy
     if (enemyFeedbackTimeoutId) clearTimeout(enemyFeedbackTimeoutId);
     enemyFeedbackClass.value = feedbackClass;
-    if (enemyState.value.cards.length > 0) { // Assuming enemy cards might have special effects too
+    // 使用 cardSlots 替代 cards
+    if (enemyState.value.cardSlots && enemyState.value.cardSlots.length > 0) { // Assuming enemy cards might have special effects too
         enemyFirstCardSpecialEffect.value = cardEffect;
     }
     enemyFeedbackTimeoutId = setTimeout(() => {
@@ -111,12 +96,13 @@ const applyFeedback = (target, feedbackClass, cardEffect) => {
 
 const handleEndTurn = () => {
   if (canEndTurn.value) {
-    applyFeedback('player', 'feedback-end-turn', ''); // Pass 'player' as target
+    applyFeedback('player', 'feedback-end-turn', '');
     gameContext.playerEndTurn();
   }
 };
 
 const handleKeyDown = (e) => {
+  if (currentView.value !== 'battle') return; // 只在战斗视图中处理游戏快捷键
   if (!isPlayerTurn.value) return;
   if (e.key === 'j') {
     applyFeedback('player', 'feedback-cultivate', 'cultivating');
@@ -130,25 +116,45 @@ const handleKeyDown = (e) => {
 };
 
 onMounted(() => {
-  if (!gameContext.isBattleOver) {
+  if (currentView.value === 'battle' && !gameContext.isBattleOver) {
     gameContext.startNewBattle();
   }
-  updateGameStatus();
+  // Removed requestAnimationFrame(updateGameStatus) from here.
+  // updateGameStatus will be called by an event or a watcher if needed, or BattleScreen handles its own RAF.
+  // A simpler approach for now:
+  const gameUpdateInterval = setInterval(() => {
+    if (currentView.value === 'battle') {
+        playerState.value = { ...gameContext.player };
+        enemyState.value = { ...gameContext.enemy };
+        gameLogs.value = [...gameContext.logs];
+        isPlayerTurn.value = gameContext.canPlayerAct();
+        canEndTurn.value = isPlayerTurn.value && gameContext.player.currentAP <= 0;
+        if (gameContext.isBattleOver) {
+            clearInterval(gameUpdateInterval); // Stop updates if battle is over
+        }
+    }
+  }, 100); // Update game status periodically, e.g., every 100ms
+
   window.addEventListener('keydown', handleKeyDown);
+  // Clean up interval on unmount
+  onUnmounted(() => {
+    clearInterval(gameUpdateInterval);
+    window.removeEventListener('keydown', handleKeyDown);
+    if (playerFeedbackTimeoutId) clearTimeout(playerFeedbackTimeoutId);
+    if (enemyFeedbackTimeoutId) clearTimeout(enemyFeedbackTimeoutId);
+  });
 });
 
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeyDown);
-  if (playerFeedbackTimeoutId) clearTimeout(playerFeedbackTimeoutId);
-  if (enemyFeedbackTimeoutId) clearTimeout(enemyFeedbackTimeoutId); // Clear enemy timeout too
-});
+// onUnmounted is handled within onMounted for the interval cleanup
 
 </script>
 
 <style scoped>
 .main-screen {
-  display: flex; /* MODIFIED */
-  flex-direction: row; /* MODIFIED */
+  display: flex;
+  flex-direction: row;
+  height: 100vh; /* Ensure it takes the full viewport height */
+  width: 100%;
   align-items: stretch; /* MODIFIED */
   font-family: Arial, sans-serif;
   position: relative;
@@ -156,27 +162,29 @@ onUnmounted(() => {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  min-height: 100vh;
-  width: 100%;
   box-sizing: border-box;
-  padding: 20px; /* MODIFIED */
-  gap: 20px; /* ADDED */
 }
 
-.battle-interface-container {
+.battle-interface-container, .card-config-container {
   display: flex;
+  flex: 1; /* Fill remaining space */
   flex-direction: column;
-  /* width: 95%; */ /* OLD */
+  height:100%;
   flex-grow: 1; /* ADDED */
   width: 0; /* ADDED */
   min-width: 70%; /* ADDED */
-  max-width: 1500px; 
   /* margin: auto; */ /* OLD - main-screen handles alignment now */
   gap: 20px; 
-  padding: 15px;
   background-color: rgba(0, 0, 0, 0.05); 
   border-radius: 10px;
   box-sizing: border-box;
+  padding: 10px; /* Added padding for consistency */
+}
+
+.card-config-container {
+  /* Specific styles for card config container if needed */
+  align-items: center; /* Example */
+  justify-content: center; /* Example */
 }
 
 .enemy-hand-wrapper {
@@ -186,11 +194,13 @@ onUnmounted(() => {
 
 .game-panels-container { 
   display: flex;
+  flex: 1; /* Fill remaining space */
   justify-content: space-between;
   width: 100%;
   padding: 0; 
   gap: 15px;
   box-sizing: border-box;
+  overflow: hidden; /* Prevent content from overflowing */
 }
 
 .side-panel {
@@ -202,21 +212,47 @@ onUnmounted(() => {
 }
 
 .center-panel {
+  display: flex;
+  flex: 1; /* Allow center panel to grow */
+  flex-direction: column;
   width: 50%; /* MODIFIED from 36% */
   min-width: 250px;
-  display: flex;
-  flex-direction: column;
+  overflow: hidden; /* Ensure GameLog does not push content */
 }
 
 .menu-sidebar {
   width: 20%; /* MODIFIED from 15% of game-panels-container */
   min-width: 200px; /* MODIFIED */
   max-width: 300px; /* ADDED */
-  background-color: rgba(0, 0, 0, 0.1);
-  padding: 10px;
+  background-color: rgba(0, 0, 0, 0.2); /* Darker for better contrast */
+  padding: 20px; /* Increased padding */
   box-sizing: border-box;
   border-radius: 8px;
-  /* height will be stretched by main-screen's align-items: stretch */
+  display: flex; /* For button layout */
+  flex-direction: column; /* Stack buttons vertically */
+  gap: 10px; /* Space between buttons */
+}
+
+.menu-sidebar button {
+  padding: 10px 15px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.menu-sidebar button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.menu-sidebar button.active {
+  background-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.7);
+  font-weight: bold;
 }
 
 .player-controls-wrapper {

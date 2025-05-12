@@ -199,6 +199,27 @@ export class AttackContext {
   }
 }
 
+// 一些枚举类
+export class RoundPhaseType {
+  // 回合开始
+  static Start = 'Start';
+  // 行动
+  static Action = 'Action';
+  // 回合结束
+  static End = 'End';
+  // 战斗开始
+  static BattleStart = 'BattleStart';
+  // 战斗结束
+  static BattleEnd = 'BattleEnd';
+}
+
+export class RoundActorType {
+  // 玩家
+  static Player = 'Player';
+  // 敌人
+  static Enemy = 'Enemy';
+}
+
 // 游戏上下文，用于协助卡牌读取游戏状态，以及执行逻辑
 export class GameContext {
     constructor() {
@@ -207,6 +228,9 @@ export class GameContext {
       this.round = 0; // 当前回合数
       this.roundActor = RoundActorType.Player; // 当前回合的行动方
       this.roundPhase = RoundPhaseType.Start; // 当前回合阶段
+      this.battleCount = 0; // 当前战斗场次
+      this.isBattleOver = false; // 当前战斗是否结束
+      this.winner = null; // 当前战斗的胜利者
 
       this.subject = this.player; // 当前主体，可以是player或enemy
       // 删除playerActivationCount，替换为通用的activationCount
@@ -214,9 +238,11 @@ export class GameContext {
       this.logs = []; // 游戏日志数组
 
       // 将钩子改为通用形式，每个单位有自己的钩子
+      this.battleStartHooks = new Map(); // 战斗开始阶段的钩子函数列表
       this.startPhaseHooks = new Map(); // 回合开始阶段的钩子函数列表
       this.actionPhaseHooks = new Map(); // 回合行动阶段的钩子函数列表
       this.endPhaseHooks = new Map(); // 回合结束阶段的钩子函数列表
+      this.battleEndHooks = new Map(); // 战斗结束阶段的钩子函数列表
 
       this.onAttackHooks = []; // 攻击时的钩子函数列表，额外输入：攻击上下文
       this.onDamageHooks = []; // 受到伤害时的钩子函数列表，额外输入：攻击者、被攻击者、造成的伤害
@@ -224,28 +250,100 @@ export class GameContext {
       this.globals = {}; // 全局变量
       
       // 初始化钩子映射
+      this.battleStartHooks.set(this.player, []);
+      this.battleStartHooks.set(this.enemy, []);
       this.startPhaseHooks.set(this.player, []);
       this.startPhaseHooks.set(this.enemy, []);
       this.actionPhaseHooks.set(this.player, []);
       this.actionPhaseHooks.set(this.enemy, []);
       this.endPhaseHooks.set(this.player, []);
       this.endPhaseHooks.set(this.enemy, []);
+      this.battleEndHooks.set(this.player, []);
+      this.battleEndHooks.set(this.enemy, []);
+    }
+
+    // 初始化角色战斗状态
+    initCharacterForBattle(character) {
+      character.currentHP = character.maxHP;
+      character.currentAP = 0;
+      character.currentJin = 0;
+      character.currentMu  = 0;
+      character.currentShui = 0;
+      character.currentHuo = 0;
+      character.currentTu   = 0;
+      character.currentHun  = 0;
+      character.activeEffects = []; // 清空效果
+      character.activationCount = 0; // 清空未决发动
+      // 可以根据需要添加更多状态的重置
+      this.addLog(character, '状态已重置，准备战斗！');
+    }
+
+    // 开始一场新的战斗
+    startNewBattle() {
+      this.battleCount++;
+      this.isBattleOver = false;
+      this.winner = null;
+      this.round = 0;
+      this.roundPhase = RoundPhaseType.BattleStart;
+      this.addLog(`系统`, `第 ${this.battleCount} 场战斗开始！`);
+
+      this.initCharacterForBattle(this.player);
+      this.initCharacterForBattle(this.enemy);
+      
+      this.triggerBattleStartHooks(this.player);
+      this.triggerBattleStartHooks(this.enemy);
+
+      // 战斗开始后，直接开始玩家的第一个回合
+      this.startPlayerTurn();
+    }
+
+    // 检查战斗是否结束并处理
+    checkBattleOver() {
+      if (this.isBattleOver) return true; // 如果已经结束，则不再重复判断
+
+      if (this.player.currentHP <= 0) {
+        this.isBattleOver = true;
+        this.winner = this.enemy;
+        this.addLog(`系统`, `${this.player.name} 被击败了！${this.enemy.name} 胜利！`);
+        this.roundPhase = RoundPhaseType.BattleEnd;
+        this.triggerBattleEndHooks(this.player); // 触发玩家方的战斗结束钩子
+        this.triggerBattleEndHooks(this.enemy); // 触发敌人方的战斗结束钩子
+        return true;
+      }
+      if (this.enemy.currentHP <= 0) {
+        this.isBattleOver = true;
+        this.winner = this.player;
+        this.addLog(`系统`, `${this.enemy.name} 被击败了！${this.player.name} 胜利！`);
+        this.roundPhase = RoundPhaseType.BattleEnd;
+        this.triggerBattleEndHooks(this.player);
+        this.triggerBattleEndHooks(this.enemy);
+        return true;
+      }
+      return false;
     }
 
     // 重构钩子触发函数
+    triggerBattleStartHooks(actor) {
+      const hooks = this.battleStartHooks.get(actor) || [];
+      hooks.forEach(hook => hook(this, actor)); // 传递 actor
+    }
     triggerStartPhaseHooks(actor) {
       const hooks = this.startPhaseHooks.get(actor) || [];
-      hooks.forEach(hook => hook(this));
+      hooks.forEach(hook => hook(this, actor)); // 传递 actor
     }
     
     triggerActionPhaseHooks(actor) {
       const hooks = this.actionPhaseHooks.get(actor) || [];
-      hooks.forEach(hook => hook(this));
+      hooks.forEach(hook => hook(this, actor)); // 传递 actor
     }
     
     triggerEndPhaseHooks(actor) {
       const hooks = this.endPhaseHooks.get(actor) || [];
-      hooks.forEach(hook => hook(this));
+      hooks.forEach(hook => hook(this, actor)); // 传递 actor
+    }
+    triggerBattleEndHooks(actor) {
+      const hooks = this.battleEndHooks.get(actor) || [];
+      hooks.forEach(hook => hook(this, actor)); // 传递 actor
     }
 
     triggerOnAttackHooks(ctx) {
@@ -306,8 +404,10 @@ export class GameContext {
       var final_damage = attack_context.getDamage();
       this.triggerOnDamageHooks(attack_context.attacker, attack_context.defender, final_damage);
       target.currentHP -= final_damage;
-      
+      target.currentHP = Math.max(target.currentHP, 0); //确保HP不为负
+
       this.addLog(source, `对 ${target.name} 造成 ${final_damage.toFixed(2)} 伤害。`);
+      this.checkBattleOver(); // 每次攻击后检查战斗是否结束
     }
 
     // 防御数值变更
@@ -428,6 +528,8 @@ export class GameContext {
 
     // 开始玩家回合
     startPlayerTurn() {
+      if (this.checkBattleOver()) return; // 如果战斗已结束，则不开始新回合
+
       this.subject = this.player;
       this.player.currentAP = this.player.maxAP;
       this.roundActor = RoundActorType.Player;
@@ -438,16 +540,22 @@ export class GameContext {
 
     // 结束玩家回合
     endPlayerTurn() {
+      if (this.checkBattleOver()) return;
+
       this.roundPhase = RoundPhaseType.End;
       this.tryActivatePendingActivation(this.player);
       this.addLog(this.player, '结束回合。');
       this.triggerEndPhaseHooks(this.player);
       this.player.currentAP = 0;
-      this.startEnemyTurn(); // 玩家回合结束后开始敌人回合
+      if (!this.checkBattleOver()) { // 结束回合后再次检查，防止在回合结束钩子中结束战斗
+        this.startEnemyTurn(); // 玩家回合结束后开始敌人回合
+      }
     }
 
     // 开始敌人回合
     async startEnemyTurn() {
+      if (this.checkBattleOver()) return;
+
       this.subject = this.enemy;
       this.roundActor = RoundActorType.Enemy;
       this.roundPhase = RoundPhaseType.Start;
@@ -465,11 +573,15 @@ export class GameContext {
 
     // 结束敌人回合
     endEnemyTurn() {
+      if (this.checkBattleOver()) return;
+
       this.roundPhase = RoundPhaseType.End;
       this.addLog(this.enemy, '结束回合。');
       this.triggerEndPhaseHooks(this.enemy);
       this.round++; // 回合数+1
-      this.startPlayerTurn(); // 敌人回合结束后开始玩家回合
+      if (!this.checkBattleOver()) {
+        this.startPlayerTurn(); // 敌人回合结束后开始玩家回合
+      }
     }
 
     // 如果当前有没有发动但已经按下的卡牌，尝试发动
@@ -532,6 +644,10 @@ export class GameContext {
     
     // 结束回合 - 新增的独立操作
     endTurn(character) {
+      if (this.isBattleOver) { // 如果战斗已结束，不允许结束回合
+        this.addLog(character, `战斗已结束，无法结束回合。`);
+        return false;
+      }
       // 只有在行动点耗尽时才能结束回合
       if (character.currentAP > 0) {
         this.addLog(character, `还有行动点，不能结束回合。`);
@@ -545,7 +661,7 @@ export class GameContext {
     
     // 检查是否是玩家回合并允许操作
     canPlayerAct() {
-      return this.roundActor === RoundActorType.Player && this.roundPhase === RoundPhaseType.Action;
+      return !this.isBattleOver && this.roundActor === RoundActorType.Player && this.roundPhase === RoundPhaseType.Action;
     }
 
     // 保留原始的玩家操作函数作为便捷方法
@@ -643,21 +759,4 @@ export class CardBase {
   getCanActivate(ctx, owner) {
     return true; // Default to true, can be overridden in subclasses
   }
-}
-
-// 一些枚举类
-export class RoundPhaseType {
-  // 回合开始
-  static Start = 'Start';
-  // 行动
-  static Action = 'Action';
-  // 回合结束
-  static End = 'End';
-}
-
-export class RoundActorType {
-  // 玩家
-  static Player = 'Player';
-  // 敌人
-  static Enemy = 'Enemy';
 }

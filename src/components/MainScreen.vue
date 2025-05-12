@@ -1,177 +1,213 @@
 <template>
   <div class="main-screen">
-    <PlayerStatus />
-    <GameLog :logs="gameLogs" />
-    
-    <div class="game-control-container">
-      <ActionPointsDisplay />
-      <div 
-        class="hand-cards-container"
-        :class="[
-          handCardsContainerFeedbackClass,
-          { 'disabled-controls': !isPlayerTurn }
-        ]"
-      >
-        <div v-if="!isPlayerTurn" class="turn-indicator">敌方回合</div>
-        <div class="cards-row">
-          <Card 
-            v-for="(card, index) in playerCards" 
-            :key="index"
-            :card="card"
-            :is-first-card="index === 0"
-            :activation-count="index === 0 ? playerActivationCountForFirstCard : 0"
-            :special-effect="index === 0 ? firstCardSpecialEffect : ''"
-          />
-        </div>
-        <div class="action-buttons">
-          <div class="hints">
-            <p>按键提示：J - 运气，K - 发动（可多次发动），L - 结束回合。</p>
-          </div>
-          <button 
-            class="end-turn-button" 
-            :disabled="!canEndTurn" 
-            @click="handleEndTurn"
-          >
-            结束回合
-          </button>
-        </div>
+    <div class="enemy-hand-wrapper">
+      <CharacterHand
+        :character="enemyState"
+        :is-player-controlled="false"
+        :current-feedback-class="enemyFeedbackClass"      
+        :first-card-special-effect="enemyFirstCardSpecialEffect"
+      />
+    </div>
+
+    <div class="main-content-area">
+      <div class="side-panel player-panel">
+        <CharacterStatus :character="playerState" title="玩家" />
+      </div>
+      <div class="center-panel">
+        <GameLog :logs="gameLogs" />
+      </div>
+      <div class="side-panel enemy-panel">
+        <CharacterStatus :character="enemyState" title="敌人" />
       </div>
     </div>
+
+    <div class="player-controls-wrapper">
+      <div v-if="!isPlayerTurn" class="turn-indicator">敌方回合</div>
+      <CharacterHand
+        :character="playerState"
+        :is-player-controlled="true"
+        :current-feedback-class="playerFeedbackClass"
+        :first-card-special-effect="playerFirstCardSpecialEffect"
+        :can-end-turn="canEndTurn"
+        @end-turn="handleEndTurn"
+      />
+    </div>
   </div>
-  
 </template>
 
 <script setup>
-import PlayerStatus from './PlayerStatus.vue'
-import ActionPointsDisplay from './ActionPointsDisplay.vue'; // 导入新的行动点组件
-import Card from './Card.vue'
-import GameLog from './GameLog.vue' // Import the new component
-import gameContext from '../models/DefaultGameSetup'
-import { ref, onMounted, onUnmounted } from 'vue'
+import CharacterStatus from './CharacterStatus.vue';
+import CharacterHand from './CharacterHand.vue'; // Import the new component
+import GameLog from './GameLog.vue';
+import gameContext from '../models/DefaultGameSetup';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 
-// 转换为响应式数据
-const playerCards = ref([...gameContext.player.cards])
-const playerActivationCountForFirstCard = ref(0)
-const handCardsContainerFeedbackClass = ref('')
-const firstCardSpecialEffect = ref('') // '', 'cultivating', 'activating'
-let feedbackTimeoutId = null
-const gameLogs = ref(gameContext.logs) // Add a ref for game logs
+const playerState = ref(gameContext.player);
+const enemyState = ref(gameContext.enemy);
+const gameLogs = ref(gameContext.logs);
+const isPlayerTurn = ref(gameContext.canPlayerAct());
+const canEndTurn = ref(false);
 
-// 检查是否是玩家回合
-const isPlayerTurn = ref(gameContext.canPlayerAct())
-// 是否可以结束回合（只有当行动力为0且是玩家回合时才可以）
-const canEndTurn = ref(false)
+// Feedback related refs for player and enemy
+const playerFeedbackClass = ref('');
+const playerFirstCardSpecialEffect = ref('');
+const enemyFeedbackClass = ref(''); // For enemy animations
+const enemyFirstCardSpecialEffect = ref(''); // For enemy card specific animations
 
-// 帧循环更新卡牌数据和激活次数
+let playerFeedbackTimeoutId = null;
+let enemyFeedbackTimeoutId = null; // Separate timeout for enemy
+
 const updateGameStatus = () => {
-  playerCards.value = [...gameContext.player.cards]
-  if (gameContext.player.cards.length > 0) {
-    playerActivationCountForFirstCard.value = gameContext.player.activationCount
-  } else {
-    playerActivationCountForFirstCard.value = 0
+  playerState.value = { ...gameContext.player }; // Shallow clone to ensure reactivity for the object itself
+  enemyState.value = { ...gameContext.enemy };   // Shallow clone for enemy
+  gameLogs.value = [...gameContext.logs];
+  isPlayerTurn.value = gameContext.canPlayerAct();
+  canEndTurn.value = isPlayerTurn.value && gameContext.player.currentAP <= 0;
+  
+  // Potentially trigger enemy animation based on game state changes
+  // This is a placeholder for where you might decide to show enemy feedback
+  // For example, if an enemy effect activates or they play a card (if that becomes visible)
+  // if (gameContext.enemy.justPerformedAction) { 
+  //   applyEnemyFeedback('feedback-activate', 'activating');
+  //   gameContext.enemy.justPerformedAction = false; // Reset flag
+  // }
+
+  requestAnimationFrame(updateGameStatus);
+};
+
+const applyFeedback = (target, feedbackClass, cardEffect) => {
+  if (target === 'player') {
+    if (!isPlayerTurn.value && feedbackClass !== 'feedback-end-turn') return; // Allow end turn feedback even if turn ends
+    if (playerFeedbackTimeoutId) clearTimeout(playerFeedbackTimeoutId);
+    playerFeedbackClass.value = feedbackClass;
+    if (playerState.value.cards.length > 0) {
+      playerFirstCardSpecialEffect.value = cardEffect;
+    }
+    playerFeedbackTimeoutId = setTimeout(() => {
+      playerFeedbackClass.value = ''
+      playerFirstCardSpecialEffect.value = ''
+      playerFeedbackTimeoutId = null
+    }, 500);
+  } else if (target === 'enemy') {
+    // Logic for applying feedback to enemy
+    if (enemyFeedbackTimeoutId) clearTimeout(enemyFeedbackTimeoutId);
+    enemyFeedbackClass.value = feedbackClass;
+    if (enemyState.value.cards.length > 0) { // Assuming enemy cards might have special effects too
+        enemyFirstCardSpecialEffect.value = cardEffect;
+    }
+    enemyFeedbackTimeoutId = setTimeout(() => {
+      enemyFeedbackClass.value = ''
+      enemyFirstCardSpecialEffect.value = ''
+      enemyFeedbackTimeoutId = null
+    }, 500);
   }
-  gameLogs.value = [...gameContext.logs] // Update logs in the game loop
-  
-  // 更新玩家回合状态
-  isPlayerTurn.value = gameContext.canPlayerAct()
-  // 直接计算是否可以结束回合，确保每帧都更新
-  canEndTurn.value = isPlayerTurn.value && gameContext.player.currentAP <= 0
-  
-  requestAnimationFrame(updateGameStatus)
-}
+};
 
-// 启动帧循环
-onMounted(() => {
-  updateGameStatus() // Renamed from updateCards
-  window.addEventListener('keydown', handleKeyDown)
-})
-
-const applyFeedback = (containerClass, cardEffect) => {
-  // 如果不是玩家回合，不应用视觉反馈
-  if (!isPlayerTurn.value) return;
-  
-  if (feedbackTimeoutId) clearTimeout(feedbackTimeoutId)
-
-  handCardsContainerFeedbackClass.value = containerClass
-  if (playerCards.value.length > 0) {
-    firstCardSpecialEffect.value = cardEffect
-  }
-
-  feedbackTimeoutId = setTimeout(() => {
-    handCardsContainerFeedbackClass.value = ''
-    firstCardSpecialEffect.value = ''
-    feedbackTimeoutId = null
-  }, 500) // Duration of feedback, adjust as needed
-}
-
-// 处理结束回合按钮点击
 const handleEndTurn = () => {
   if (canEndTurn.value) {
-    applyFeedback('feedback-end-turn', '');
+    applyFeedback('player', 'feedback-end-turn', ''); // Pass 'player' as target
     gameContext.playerEndTurn();
   }
-}
+};
 
-// 键盘事件处理
 const handleKeyDown = (e) => {
-  // 如果不是玩家回合，忽略键盘输入
   if (!isPlayerTurn.value) return;
-  
   if (e.key === 'j') {
-    applyFeedback('feedback-cultivate', 'cultivating')
-    gameContext.playerCultivation()
+    applyFeedback('player', 'feedback-cultivate', 'cultivating');
+    gameContext.playerCultivation();
   } else if (e.key === 'k') {
-    applyFeedback('feedback-activate', 'activating')
-    gameContext.playerActivation()
+    applyFeedback('player', 'feedback-activate', 'activating');
+    gameContext.playerActivation();
   } else if (e.key === 'l' && canEndTurn.value) {
-    // 添加"l"键结束回合的快捷键
     handleEndTurn();
   }
-}
+};
 
-// 添加/移除键盘事件监听
+onMounted(() => {
+  if (!gameContext.isBattleOver) {
+    gameContext.startNewBattle();
+  }
+  updateGameStatus();
+  window.addEventListener('keydown', handleKeyDown);
+});
+
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeyDown)
-  if (feedbackTimeoutId) clearTimeout(feedbackTimeoutId)
-})
+  window.removeEventListener('keydown', handleKeyDown);
+  if (playerFeedbackTimeoutId) clearTimeout(playerFeedbackTimeoutId);
+  if (enemyFeedbackTimeoutId) clearTimeout(enemyFeedbackTimeoutId); // Clear enemy timeout too
+});
+
 </script>
 
 <style scoped>
 .main-screen {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start; /* Changed from space-between */
   font-family: Arial, sans-serif;
   position: relative;
-  /* padding-top: 80px; Remove this, PlayerStatus is now part of the normal flow */
+  background-image: url('/bg_clouds.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  min-height: 100vh;
+  width: 100%; 
+  box-sizing: border-box;
 }
 
-.hand-cards-container {
-  display: flex;
-  flex-direction: column; /* Changed to column to contain the cards-row */
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out; /* For smooth animations */
-  position: relative; /* For absolute positioning of turn indicator */
-}
-
-/* 添加禁用时的样式 */
-.disabled-controls {
-  opacity: 0.7;
-  filter: grayscale(30%);
-  pointer-events: none;
-}
-
-/* 回合指示器样式 */
-.turn-indicator {
+.enemy-hand-wrapper {
   position: absolute;
-  top: -30px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
+  width: 80%; /* Adjust width as desired */
+  max-width: 700px; /* Max width for enemy hand */
+  z-index: 5;
+  padding-top: 10px; /* Ensure CharacterHand has some space if it has internal padding */
+}
+
+.main-content-area {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  height:100%;
+  margin: 0 auto;
+  padding: 300px 20px 350px 20px; /* Increased top-bottom padding to avoid overlap with enemy and player hand cards */
+  gap: 20px;
+  flex-grow: 1;
+  box-sizing: border-box;
+}
+
+.side-panel {
+  width: 25%; 
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center; 
+}
+
+.center-panel {
+  width: 45%; 
+  min-width: 300px; 
+  display: flex;
+  flex-direction: column;
+}
+
+.player-controls-wrapper {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%; /* Adjust width as desired */
+  max-width: 800px; /* Max width for player controls */
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.turn-indicator {
+  /* This is now part of player-controls-wrapper, adjust if needed or make it specific to player CharacterHand */
   background-color: #ff4d4d;
   color: white;
   padding: 5px 15px;
@@ -179,102 +215,20 @@ onUnmounted(() => {
   font-weight: bold;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   animation: pulse 2s infinite;
-  z-index: 10;
-}
-
-.action-buttons {
-  display: flex;
-  justify-content: center;
-  margin-top: 15px;
-}
-
-.end-turn-button {
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.end-turn-button:hover:not(:disabled) {
-  background-color: #45a049;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.end-turn-button:disabled {
-  background-color: #cccccc;
-  color: #666666;
-  cursor: not-allowed;
-}
-
-.feedback-end-turn {
-  animation: end-turn-feedback 0.5s ease-in-out;
-}
-
-@keyframes end-turn-feedback {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); box-shadow: 0 4px 16px rgba(76, 175, 80, 0.6); }
-  100% { transform: scale(1); }
+  margin-bottom: 10px; /* Space it out from the hand */
+  /* position: absolute; */ /* Removed absolute positioning as it's now in flow */
+  /* top: -30px; */
+  /* left: 50%; */
+  /* transform: translateX(-50%); */
 }
 
 @keyframes pulse {
-  0% { transform: translateX(-50%) scale(1); }
-  50% { transform: translateX(-50%) scale(1.05); }
-  100% { transform: translateX(-50%) scale(1); }
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
 }
 
-.cards-row {
-  display: flex;
-  flex-direction: row; /* Ensures cards are in a row */
-  gap: 10px; /* Space between cards */
-  justify-content: center; /* Centers cards horizontally */
-}
+/* Styles for feedback animations are now in CharacterHand.vue */
+/* Any styles specific to .hand-cards-container or .game-control-container that are not covered by CharacterHand or player-controls-wrapper can be adjusted or removed */
 
-.game-control-container {
-  position: fixed;
-  bottom: 20px; 
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column; /* Stack AP and cards vertically */
-  align-items: center; /* Center align */
-  justify-content: center; /* Center vertically */
-  width: 100%; /* Full width */
-}
-
-.feedback-cultivate {
-  animation: hand-shake 0.2s ease-in-out;
-}
-.feedback-activate {
-  animation: hand-pulse 0.2s ease-in-out;
-}
-
-@keyframes hand-shake {
-  0%, 100% { transform: translateX(-10px) scale(1); }
-  25% { transform: translateX(-10px) translateX(-3px) scale(1.01); }
-  75% { transform: translateX(-10px) translateX(3px) scale(1.01); }
-}
-
-@keyframes hand-pulse {
-  0%, 100% { transform: translateX(-10px) ; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-  50% { transform: translateX(-10px) ; box-shadow: 0 4px 16px rgba(66,185,131,0.6); } /* Vue green color pulse */
-}
-
-h1 {
-  color: #42b983;
-}
-p {
-  font-size: 1.2em;
-}
-
-.hints p {
-  font-size: 0.8em;
-  color: #666;
-  margin: 0;
-}
 </style>

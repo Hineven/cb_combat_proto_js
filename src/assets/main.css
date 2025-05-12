@@ -3,18 +3,18 @@ body {
   margin: 0;
   padding: 0;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f5f5f5;
-  color: #333;
+  background-color: #f0f0f0; /* Changed from #f5f5f5 to a slightly different warm gray */
+  color: #444; /* Changed from #333 to a slightly darker warm gray */
 }
 
 /* 链接样式 */
 a {
   text-decoration: none;
-  color: #42b983;
+  color: #777; /* Changed from #42b983 to warm gray */
 }
 
 a:hover {
-  color: #3aa373;
+  color: #555; /* Changed from #3aa373 to a darker warm gray */
 }
 
 /* 容器基础样式 */
@@ -37,6 +37,6 @@ button {
 }
 
 button:hover {
-  background-color: #42b983;
+  background-color: #777; /* Changed from #42b983 to warm gray */
   color: white;
 }

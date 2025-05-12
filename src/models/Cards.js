@@ -1,4 +1,7 @@
-import { CardBase, Effect, GameContext } from './Game.js';
+import { CardBase } from './CardBase.js'; // Changed from Game.js
+import { GameContext } from './Game.js'; // Assuming GameContext remains in Game.js
+// import { Effect } from './Game.js'; // Effect is not directly used or should be from EffectBase.js
+
 // 具体的卡牌类，继承自卡牌类，定义了具体的卡牌类型和效果
 // 可以根据需要创建多个具体的卡牌类，每个卡牌类可以定义自己的卡牌类型和效果
 export class BasicAttackCard extends CardBase {
@@ -211,3 +214,83 @@ import { TemporaryDefenceEffect } from './Effects.js'; // Import the effect clas
         }
       }
   };
+
+  // 新卡牌：灵气爆发
+export class LingQiBaoFaCard extends CardBase {
+  constructor() {
+    super();
+    this.name = '灵气爆发';
+    this.subtitle = '聚灵秘法';
+    this.cultivationAPCost = 1;
+    this.activationAPCost = 1;
+  }
+
+  cultivationEffect(ctx, owner) {
+    if (owner.currentAuraSum() === 0) {
+      // 简单起见，随机引导一种灵气，或者引导一种基础灵气如“杂”
+      const auraTypes = ['金', '木', '水', '火', '土', '杂'];
+      const randomAuraType = auraTypes[Math.floor(Math.random() * auraTypes.length)];
+      ctx.produceAura(owner, randomAuraType, 1);
+      ctx.addLog(owner, `通过 ${this.name} 引导了 1 点 ${randomAuraType} 灵气。`);
+    } else {
+      ctx.addLog(owner, `${this.name} 运气失败，当前已有灵气。`);
+    }
+  }
+
+  getPassiveDescription(ctx, owner) {
+    return `【运】若无灵气，则引导1点任意灵气。`;
+  }
+
+  activationEffect(ctx, owner) {
+    const consumedAura = owner.currentAuraSum();
+    if (consumedAura === 0) {
+      ctx.addLog(owner, `${this.name} 发动失败，没有灵气可消耗。`);
+      return;
+    }
+
+    const damage = consumedAura * 2;
+    const heal = consumedAura * 1;
+
+    // 消耗所有灵气
+    // 这里需要一个方法来消耗所有类型的灵气，或者逐个消耗
+    // 假设 ctx 有一个 consumeAllAura 方法，或者 owner 有相应方法
+    // 以下为示意，具体实现依赖 GameContext 或 CharacterStateBase 中的方法
+    for (const type of Object.keys(owner.auras)) {
+        if (owner.auras[type] > 0) {
+            ctx.consumeAura(owner, type, owner.auras[type]);
+        }
+    }
+
+    const target = owner.isPlayer ? ctx.enemy : ctx.player;
+    ctx.launchAttackTo(owner, target, damage);
+    ctx.healCharacter(owner, heal, owner);
+    ctx.addLog(owner, `${this.name} 发动，消耗 ${consumedAura} 点灵气，造成 ${damage} 伤害，回复 ${heal} 生命。`);
+  }
+
+  getDescription(ctx, owner) {
+    const currentAura = owner.currentAuraSum();
+    const potentialDamage = currentAura * 2;
+    const potentialHeal = currentAura * 1;
+    return `【发】消耗所有灵气（当前${currentAura}点），每点造成2伤害（共${potentialDamage}），回复1生命（共${potentialHeal}）。`;
+  }
+
+  getCanActivate(ctx, owner) {
+    return owner.currentAuraSum() > 0;
+  }
+
+  getCardMajorColor(ctx, owner) {
+    return "#FFD700"; // Gold
+  }
+
+  getMinorColor(ctx, owner) {
+    return "#FFEC8B"; // LightGold
+  }
+
+  getDecorationColor(ctx, owner) {
+    return "#FFA500"; // Orange
+  }
+
+  getDecorationType(ctx, owner) {
+    return "stripe";
+  }
+}

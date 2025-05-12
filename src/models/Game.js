@@ -14,177 +14,9 @@
 //   触发钩子，执行一些卡牌可能注册过的特殊逻辑。
 //   清空行动点。
 
-
-// 敌对角色相对简单，有固定的行动逻辑，每回合会采取四种策略之一：攻击（对玩家角色按照某些逻辑计算并造成伤害）、回血、防御（下回合所受伤害大幅减小）、聚气（后续回合中，基础攻击力和防御力永久提升）。
-
-
-// 效果类型枚举类
-export class EffectType {
-  // 增益
-  static Buff = 'Buff';
-  // 减益
-  static Debuff = 'Debuff';
-  // 其它
-  static Other = 'Other';
-}
-
-// 效果基类，能附着在角色上，并在UI上显示出来
-export class Effect {
-  constructor () {
-    this.color = 'white'; // 效果的颜色
-    this.name = ''; // 效果的名称
-    this.name_tag = ''; // 用于简短显示的名称，一般为一个汉字。如果为空，则默认为name的第一个汉字
-    this.description = ''; // 效果的描述，用于细节面板中显示。
-    this.type = EffectType.Buff; // 效果的类型
-    this.shouldDisplay = true; // 是否在UI上显示
-    this.owner = null; // 效果的所有者
-  }
-  // 效果被附着到角色上时，此函数会被调用，可以用于注册各种监听器
-  onApply (ctx, target) {
-    
-  }
-  // 效果被移除时，此函数会被调用，可以用于删除各种监听器
-  onRemove (ctx, target) {
-
-  }
-
-  getDescription(ctx) {
-    // Basic implementation, can be overridden by subclasses for dynamic descriptions
-    return this.description || this.name || 'No detailed description available.';
-  }
-}
-
-
-// 角色状态类，玩家角色和敌对角色共有的状态
-export class CharacterState {
-  constructor() {
-    this.name = '未命名角色'; // 角色名称，用于显示在日志中
-    this.maxAP = 4; // 最大行动点
-    this.maxHP = 50; // 最大生命值
-    this.currentHP = this.maxHP; // 当前生命值
-    this.currentAP = 0; // 当前行动点
-    this.baseAttack = 10; // 基础攻击力
-    this.baseDefense = 10; // 基础防御力
-    this.overallMultiplier = 1; // 总倍率
-    this.computedAttack = this.baseAttack; // 计算攻击力
-    this.computedDefense = this.baseDefense; // 计算防御力
-    this.activeEffects = []; // 当前生效的效果列表
-  }
-}
-
-// 玩家角色类，继承自角色状态类，添加了卡牌相关属性和方法，以及一些用于发动卡牌的资源
-export class PlayerState extends CharacterState {
-  constructor() {
-    super();
-    this.name = 'Player';
-    this.cards = []; // 卡牌列表
-    this.currentJin = 0; // 当前金灵气数量
-    this.currentMu  = 0; // 当前木灵气数量
-    this.currentShui = 0; // 当前水灵气数量
-    this.currentHuo = 0; // 当前火灵气数量
-    this.currentTu   = 0; // 当前土灵气数量
-    this.currentHun  = 0; // 当前杂灵气数量
-    this.dantianAura = 100; // 丹田中可以产出的灵气数量
-    this.maxPendingActivation = 3; // 最大的未决发动次数
-    this.activationCount = 0; // 当前的未决发动次数
-    this.isPlayer = true; // 是否是玩家
-  }
-  currentAuraSum() {
-    return this.currentJin + this.currentMu + this.currentShui + this.currentHuo + this.currentTu + this.currentHun;
-  }
-}
-
-// 敌对角色类，现在也继承自PlayerState
-export class EnemyState extends PlayerState {
-  constructor() {
-    super();
-    this.name = 'Enemy';
-    this.isPlayer = false; // 标记为敌对角色
-    this.aiType = "basic"; // 敌对角色的AI类型，可以在Enemies.js中定义不同的AI
-    this.preferActivation = 0.7; // 倾向于发动卡牌的概率
-    this.actionDelay = 1000; // AI行动的延迟时间（毫秒）
-  }
-  
-  // 基础AI逻辑框架，在Enemies.js中可以覆盖这些方法
-  async decideAction(ctx) {
-    // 卡牌AI决策逻辑，返回决策后的行动类型和参数
-    let action = "none";
-    
-    // 简单AI：有行动点就用，优先发动，其次运气
-    while (this.currentAP > 0) {
-      // 每次操作前等待一定时间
-      await new Promise(resolve => setTimeout(resolve, this.actionDelay));
-      
-      // 看看是发动还是运气
-      const shouldActivate = Math.random() < this.preferActivation && 
-                            this.cards[0].getCanActivate(ctx, this) &&
-                            this.activationCount < this.maxPendingActivation;
-      
-      if (shouldActivate) {
-        // 尝试发动卡牌
-        const success = ctx.activation(this);
-        if (!success) {
-          // 如果发动失败，执行运气
-          ctx.cultivation(this);
-        }
-        action = "used_card";
-      } else {
-        // 执行运气
-        ctx.cultivation(this);
-        action = "used_card";
-      }
-    }
-    
-    // 当行动点耗尽时，主动结束回合
-    await new Promise(resolve => setTimeout(resolve, this.actionDelay));
-    ctx.endTurn(this);
-    
-    return action;
-  }
-  
-  executeAction(ctx, actionType) {
-    // 不需要额外执行，decideAction已经执行了card相关操作
-    if (actionType !== "used_card") {
-      // 只有当不是卡牌操作时才执行老的AI逻辑（兼容）
-      switch(actionType) {
-        case "attack":
-          this.basicAttack(ctx);
-          break;
-        case "defend":
-          this.basicDefend(ctx);
-          break;
-        case "heal":
-          this.basicHeal(ctx);
-          break;
-        case "charge":
-          this.basicCharge(ctx);
-          break;
-      }
-    }
-  }
-  
-  // 保留简单AI的基础攻击、防御、治疗、聚气逻辑以备不时之需
-  basicAttack(ctx) {
-    const damage = this.computedAttack;
-    ctx.launchAttackTo(this, ctx.player, damage);
-  }
-  
-  basicDefend(ctx) {
-    ctx.getDefence(this, this.baseDefense * 0.5);
-    ctx.addLog(this, '增强了防御。');
-  }
-  
-  basicHeal(ctx) {
-    this.currentHP = Math.min(this.currentHP + this.maxHP * 0.1, this.maxHP);
-    ctx.addLog(this, '恢复了一些生命值。');
-  }
-  
-  basicCharge(ctx) {
-    this.baseAttack += 1;
-    this.baseDefense += 1;
-    ctx.addLog(this, '聚集了力量，基础属性永久提升。');
-  }
-}
+import { PlayerState, EnemyState } from './CharacterStateBase.js';
+import { Effect, EffectType } from './EffectBase.js'; 
+import { CardBase } from './CardBase.js'; 
 
 export class AttackContext {
   constructor() {
@@ -408,6 +240,23 @@ export class GameContext {
 
       this.addLog(source, `对 ${target.name} 造成 ${final_damage.toFixed(2)} 伤害。`);
       this.checkBattleOver(); // 每次攻击后检查战斗是否结束
+    }
+
+    // 治疗
+    // @param {CharacterState} target - 治疗目标
+    // @param {number} amount - 治疗量
+    // @param {CharacterState} source - 治疗来源（可选）
+    healCharacter(target, amount, source = null) {
+      const previousHP = target.currentHP;
+      target.currentHP = Math.min(target.currentHP + amount, target.maxHP);
+      const healedAmount = target.currentHP - previousHP;
+
+      if (healedAmount > 0) {
+        const sourceName = source ? source.name : '效果';
+        this.addLog(target, `被 ${sourceName} 恢复了 ${healedAmount.toFixed(2)} 生命。`);
+      }
+      // 可以在这里添加治疗相关的钩子，如果需要的话
+      // this.triggerOnHealHooks(target, amount, source);
     }
 
     // 防御数值变更
@@ -693,70 +542,3 @@ export class GameContext {
       return this.endTurn(this.player);
     }
 };
-
-// 卡牌类，表示一类卡牌的基础信息和执行逻辑，用于创建卡牌实例
-// 继承自此类的子类可以定义具体的卡牌类型和效果
-export class CardBase {
-  constructor() {
-    this.name = ''; // 卡牌名称
-    this.cultivationAPCost = 1; // 运气的行动点消耗
-    this.activationAPCost = 1; // 发动的行动点消耗
-    this.subtitle = ''; // 简短描述卡牌所运功夫所属种类，用略小号字体显示在名称下方
-    this.maxPendingActivation = 999; // 最大pending发动次数
-    this.owner = null; // 卡牌所有者
-  }
-  // 卡牌的运气效果
-  // @param {GameContext} ctx - 游戏上下文
-  // @param {PlayerState} owner - 卡牌所有者
-  cultivationEffect(ctx, owner) {
-    // 卡牌的运气效果
-    // 可以根据卡牌的具体实现来定义
-  }
-  // 卡牌的发动效果
-  // @param {GameContext} ctx - 游戏上下文
-  // @param {PlayerState} owner - 卡牌所有者
-  activationEffect(ctx, owner) {
-    // 卡牌的发动效果
-    // 可以根据卡牌的具体实现来定义 
-  }
-  // 卡牌初始化时会被调用
-  // @param {GameContext} ctx - 游戏上下文
-  // @param {PlayerState} owner - 卡牌所有者
-  init(ctx, owner) {
-    this.owner = owner;
-  }
-  // 卡牌被移除时会被调用
-  // @param {GameContext} ctx - 游戏上下文
-  // @param {PlayerState} owner - 卡牌所有者
-  remove(ctx, owner) {
-    
-  }
-
-  // 卡牌发动效果描述
-  getDescription(ctx, owner) {
-    return "";
-  }
-  // 卡牌运气效果描述
-  getPassiveDescription(ctx, owner) {
-    return ""; // Default: no passive description
-  }
-
-  // 特殊效果，用于UI视觉展示
-  getCardMajorColor(ctx, owner) {
-    return "#f0f0f0"; // Default light gray
-  }
-  getMinorColor(ctx, owner) {
-    return "#cccccc"; // Default gray
-  }
-  getDecorationColor(ctx, owner) {
-    return "#aaaaaa"; // Default dark gray
-  }
-  getDecorationType (ctx, owner) {
-    return "none"; // 'none', 'stripe', 'corner'
-  }
-
-  // 逻辑判断
-  getCanActivate(ctx, owner) {
-    return true; // Default to true, can be overridden in subclasses
-  }
-}

@@ -1,4 +1,4 @@
-import { CardBase, Effect, EffectType } from './Game.js';
+import { Effect, EffectType } from './EffectBase.js';
 
 
 // 具体的效果类，继承自效果类，定义了具体的效果类型和行为

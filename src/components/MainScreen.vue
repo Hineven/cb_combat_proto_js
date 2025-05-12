@@ -1,36 +1,42 @@
 <template>
   <div class="main-screen">
-    <div class="enemy-hand-wrapper">
-      <CharacterHand
-        :character="enemyState"
-        :is-player-controlled="false"
-        :current-feedback-class="enemyFeedbackClass"      
-        :first-card-special-effect="enemyFirstCardSpecialEffect"
-      />
-    </div>
+    <div class="battle-interface-container">
+      <div class="enemy-hand-wrapper">
+        <CharacterHand
+          :character="enemyState"
+          :is-player-controlled="false"
+          :current-feedback-class="enemyFeedbackClass"
+          :first-card-special-effect="enemyFirstCardSpecialEffect"
+        />
+      </div>
 
-    <div class="main-content-area">
-      <div class="side-panel player-panel">
-        <CharacterStatus :character="playerState" title="玩家" />
+      <div class="game-panels-container"> 
+        <div class="side-panel player-panel">
+          <CharacterStatus :character="playerState" title="玩家" />
+        </div>
+        <div class="center-panel">
+          <GameLog :logs="gameLogs" />
+        </div>
+        <div class="side-panel enemy-panel">
+          <CharacterStatus :character="enemyState" title="敌人" />
+        </div>
+        <!-- menu-sidebar was here -->
       </div>
-      <div class="center-panel">
-        <GameLog :logs="gameLogs" />
-      </div>
-      <div class="side-panel enemy-panel">
-        <CharacterStatus :character="enemyState" title="敌人" />
+
+      <div class="player-controls-wrapper">
+        <div v-if="!isPlayerTurn" class="turn-indicator">敌方回合</div>
+        <CharacterHand
+          :character="playerState"
+          :is-player-controlled="true"
+          :current-feedback-class="playerFeedbackClass"
+          :first-card-special-effect="playerFirstCardSpecialEffect"
+          :can-end-turn="canEndTurn"
+          @end-turn="handleEndTurn"
+        />
       </div>
     </div>
-
-    <div class="player-controls-wrapper">
-      <div v-if="!isPlayerTurn" class="turn-indicator">敌方回合</div>
-      <CharacterHand
-        :character="playerState"
-        :is-player-controlled="true"
-        :current-feedback-class="playerFeedbackClass"
-        :first-card-special-effect="playerFirstCardSpecialEffect"
-        :can-end-turn="canEndTurn"
-        @end-turn="handleEndTurn"
-      />
+    <div class="menu-sidebar">
+      <!-- Menu content will go here -->
     </div>
   </div>
 </template>
@@ -141,9 +147,9 @@ onUnmounted(() => {
 
 <style scoped>
 .main-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: flex; /* MODIFIED */
+  flex-direction: row; /* MODIFIED */
+  align-items: stretch; /* MODIFIED */
   font-family: Arial, sans-serif;
   position: relative;
   background-image: url('/bg_clouds.png');
@@ -151,63 +157,77 @@ onUnmounted(() => {
   background-position: center;
   background-repeat: no-repeat;
   min-height: 100vh;
-  width: 100%; 
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px; /* MODIFIED */
+  gap: 20px; /* ADDED */
+}
+
+.battle-interface-container {
+  display: flex;
+  flex-direction: column;
+  /* width: 95%; */ /* OLD */
+  flex-grow: 1; /* ADDED */
+  width: 0; /* ADDED */
+  min-width: 70%; /* ADDED */
+  max-width: 1500px; 
+  /* margin: auto; */ /* OLD - main-screen handles alignment now */
+  gap: 20px; 
+  padding: 15px;
+  background-color: rgba(0, 0, 0, 0.05); 
+  border-radius: 10px;
   box-sizing: border-box;
 }
 
 .enemy-hand-wrapper {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 80%; /* Adjust width as desired */
-  max-width: 700px; /* Max width for enemy hand */
-  z-index: 5;
-  padding-top: 10px; /* Ensure CharacterHand has some space if it has internal padding */
+  width: 100%; 
+  box-sizing: border-box;
 }
 
-.main-content-area {
+.game-panels-container { 
   display: flex;
   justify-content: space-between;
   width: 100%;
-  height:100%;
-  margin: 0 auto;
-  padding: 300px 20px 350px 20px; /* Increased top-bottom padding to avoid overlap with enemy and player hand cards */
-  gap: 20px;
-  flex-grow: 1;
+  padding: 0; 
+  gap: 15px;
   box-sizing: border-box;
 }
 
 .side-panel {
-  width: 25%; 
-  min-width: 200px;
-  display: flex;
-  flex-direction: column;
-  align-items: center; 
-}
-
-.center-panel {
-  width: 45%; 
-  min-width: 300px; 
-  display: flex;
-  flex-direction: column;
-}
-
-.player-controls-wrapper {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 90%; /* Adjust width as desired */
-  max-width: 800px; /* Max width for player controls */
-  z-index: 10;
+  width: 25%; /* MODIFIED from 22% */
+  min-width: 180px;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
+.center-panel {
+  width: 50%; /* MODIFIED from 36% */
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-sidebar {
+  width: 20%; /* MODIFIED from 15% of game-panels-container */
+  min-width: 200px; /* MODIFIED */
+  max-width: 300px; /* ADDED */
+  background-color: rgba(0, 0, 0, 0.1);
+  padding: 10px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  /* height will be stretched by main-screen's align-items: stretch */
+}
+
+.player-controls-wrapper {
+  width: 100%; 
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+
 .turn-indicator {
-  /* This is now part of player-controls-wrapper, adjust if needed or make it specific to player CharacterHand */
   background-color: #ff4d4d;
   color: white;
   padding: 5px 15px;
@@ -215,11 +235,7 @@ onUnmounted(() => {
   font-weight: bold;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   animation: pulse 2s infinite;
-  margin-bottom: 10px; /* Space it out from the hand */
-  /* position: absolute; */ /* Removed absolute positioning as it's now in flow */
-  /* top: -30px; */
-  /* left: 50%; */
-  /* transform: translateX(-50%); */
+  margin-bottom: 10px;
 }
 
 @keyframes pulse {
@@ -227,8 +243,4 @@ onUnmounted(() => {
   50% { transform: scale(1.05); }
   100% { transform: scale(1); }
 }
-
-/* Styles for feedback animations are now in CharacterHand.vue */
-/* Any styles specific to .hand-cards-container or .game-control-container that are not covered by CharacterHand or player-controls-wrapper can be adjusted or removed */
-
 </style>

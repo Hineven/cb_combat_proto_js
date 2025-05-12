@@ -1,5 +1,5 @@
 import { GameContext } from './Game';
-import { BasicAttackCard, YingChengCard, BasicDefenseCard, Leino, WanMuJue1} from './Cards';
+import { BasicAttackCard, YingChengCard, BasicDefenseCard, Leino, WanMuJue1, LingQiBaoFaCard } from './Cards';
 
 const gameContext = new GameContext();
 gameContext.player.currentHP = 100; // 初始生命值
@@ -9,7 +9,8 @@ gameContext.player.cards = [
     new BasicAttackCard(),
     new YingChengCard(),
     new BasicDefenseCard(),
-    new WanMuJue1()
+    new WanMuJue1()//,
+    // new LingQiBaoFaCard()
 ]; // 初始卡牌
 
 // 初始化敌人状态

@@ -1,16 +1,20 @@
 // 基本游戏规则概述：
 // 在游戏中，有玩家角色和敌对角色两个角色。玩家可以控制玩家角色。游戏分回合进行，每回合，玩家角色先行动，敌对角色后行动。
 
-// 玩家角色拥有卡牌，所有玩家角色的卡牌排成一行。
+// 角色拥有卡牌序列和手牌。手牌是卡牌序列的前N张牌（N为角色的手牌数属性）。
 // 玩家回合分为三个阶段：回合开始阶段、行动阶段、回合结束阶段
 // 回合开始阶段：
 //   玩家补充行动点到满。
 //   触发钩子，执行一些卡牌可能注册过的特殊逻辑。
-// 回合行动阶段：玩家可以不断使用行动点对首位卡牌进行两种操作：运气、发动。当玩家行动点消耗完时，行动阶段自动结束。
-//   运气：消耗一个行动点，将首位卡牌移动到末尾，并按照玩家角色当前状态触发卡牌的运气效果，按下j键可以运气。
-//   发动：消耗一个行动点，在回合结束或下一次运气前，按照玩家角色当前状态触发卡牌的主动发动效果，按下k可以发动。
-//       注意，玩家可以对同一张卡牌按下多次k来“多重发动”卡牌，这种情况下，在下一次运气前此卡牌仍只会发动一次，但是发动时卡牌效果所计算玩家角色的状态会获得50%的提升。
+// 回合行动阶段：玩家可以消耗行动点执行操作。当玩家行动点消耗完或主动选择结束时，行动阶段结束。
+//   操作1：运气 - 消耗一个行动点，将卡牌序列首位卡牌移动到末尾，并触发该卡牌的运气效果。通过按J键或特定UI操作执行。
+//   操作2：发动 - 消耗一个行动点，选择手牌中的任意一张卡牌（序列第i张，0 <= i < N）进行发动准备。
+//            发动时，所选卡牌之前（序列0到i-1）的卡牌会被依次移动到卡牌序列的末尾（不触发运气效果）。
+//            被选中的卡牌（原第i张，现第0张）进入“待激活”状态，其效果将在回合结束或下一次“运气”操作前结算。
+//            可以对同一张“待激活”卡牌多次执行“发动”操作（如果AP允许），每次会增加其“重数”，可能增强其最终效果。
+//            通过点击手牌中的卡牌，或按数字键1-N来发动对应手牌。
 // 回合结束阶段：
+//   如果存在“待激活”的卡牌，则发动其效果。
 //   触发钩子，执行一些卡牌可能注册过的特殊逻辑。
 //   清空行动点。
 
@@ -452,9 +456,10 @@ export class GameContext {
         return false; // 返回false表示操作失败
       }
       
-      this.tryActivatePendingActivation(character);
+      this.tryActivatePendingActivation(character); // 尝试发动待激活的卡牌（通常是之前“激发”操作选中的牌）
       if (character.cardSlots.length > 0) {
         const firstSlot = character.cardSlots[0];
+        // "运气" 总是作用于牌堆顶的第一张牌
         firstSlot.card.cultivationEffect(this, character);
         // 把排头的卡槽移动到末尾
         const shiftedSlot = character.cardSlots.shift();
@@ -474,35 +479,65 @@ export class GameContext {
     }
 
     // 发动
-    activation(character) {
+    // @param {CharacterState} character - 执行发动的角色
+    // @param {number} cardIndexInHand - 要发动的卡牌在手牌中的索引 (0-based)
+    activation(character, cardIndexInHand) {
       // 如果行动点不足，不能继续发动
       if (character.currentAP <= 0) {
-        return false; // 返回false表示操作失败
+        this.addLog(character, `行动点不足，无法发动。`);
+        return false; 
       }
       
-      if (character.cardSlots.length === 0 || character.cardSlots[0].isEmpty()) {
-        // this.addLog(character, `首位卡槽为空，无法发动。`); // 可选日志
-        return false; // 没有卡牌或首位为空则不能发动
+      // 检查手牌索引是否有效
+      if (cardIndexInHand < 0 || cardIndexInHand >= Math.min(character.cardSlots.length, character.handSize)) {
+        this.addLog(character, `选择的卡牌无效。`);
+        return false; 
       }
 
-      const firstSlotCard = character.cardSlots[0].card;
+      const targetCardSlot = character.cardSlots[cardIndexInHand];
+
+      if (!targetCardSlot || targetCardSlot.isEmpty()) {
+        this.addLog(character, `选择的卡槽为空，无法发动。`);
+        return false; 
+      }
+
+      const cardToActivate = targetCardSlot.card;
 
       // 如果超过最大pendingActivation，啥都不干，返回false
+      // 注意：这里的 activationCount 是角色身上的，不是卡牌的
       if (character.activationCount + 1 > character.maxPendingActivation) {
+        this.addLog(character, `已达到最大准备发动数量。`);
         return false;
       }
       // 如果卡牌不可发动，啥都不干，返回false
-      if (firstSlotCard.getCanActivate(this, character) == false) {
+      if (cardToActivate.getCanActivate(this, character) == false) {
+        this.addLog(character, `${cardToActivate.name} 当前不可发动。`);
         return false;
       }
       // 如果超过卡牌maxPendingActivation，返回false
-      if (character.activationCount + 1 > firstSlotCard.maxPendingActivation) {
+      if (character.activationCount + 1 > cardToActivate.maxPendingActivation) {
+        this.addLog(character, `${cardToActivate.name} 已达到其最大准备发动次数。`);
         return false;
       }
-      character.activationCount++;
-      this.addLog(character, `准备发动 ${firstSlotCard.name} (当前 ${character.activationCount} 重)。`);
+
+      // 丢弃激发卡牌之前的卡牌，并移动到牌堆末尾
+      // 这些卡牌不触发“运气”效果
+      for (let i = 0; i < cardIndexInHand; i++) {
+        const discardedSlot = character.cardSlots.shift(); // 从头部移除
+        if (discardedSlot && !discardedSlot.isEmpty()) {
+          character.cardSlots.push(discardedSlot); // 添加到末尾
+          this.addLog(character, `丢弃了 ${discardedSlot.card.name} 到牌堆底。`);
+        }
+      }
+      
+      // 此时，原先在 cardIndexInHand 的牌现在应该在索引 0
+      // 更新日志和角色状态，标记这张卡牌为待发动
+      character.activationCount++; 
+      // 注意：实际的卡牌效果发动(activationEffect)是在回合结束或者下一次运气时由 tryActivatePendingActivation 触发
+      // 这里只是标记为“准备发动”
+      this.addLog(character, `准备发动 ${cardToActivate.name} (当前 ${character.activationCount} 重)。`);
       // 消耗行动点
-      this.consumeAP(character, firstSlotCard.activationAPCost);
+      this.consumeAP(character, cardToActivate.activationAPCost);
       return true; // 返回true表示操作成功
     }
     
@@ -538,13 +573,15 @@ export class GameContext {
       return this.cultivation(this.player);
     }
     
-    playerActivation() {
+    // playerActivation 现在需要一个卡牌索引
+    // @param {number} cardIndexInHand - 玩家手牌中要发动的卡牌索引
+    playerActivation(cardIndexInHand) {
       // 添加检查，仅在玩家回合时允许操作
       if (!this.canPlayerAct()) {
         console.log("现在不是玩家回合，无法操作");
         return false;
       }
-      return this.activation(this.player);
+      return this.activation(this.player, cardIndexInHand);
     }
     
     // 新增玩家结束回合便捷方法

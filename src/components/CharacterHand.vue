@@ -20,18 +20,37 @@
         <Card
           v-for="(slot, index) in characterCardSlots"
           :key="index" 
-          :card="slot.card" 
-          :is-first-card="isPlayerControlled && index === 0"
-          :activation-count="isPlayerControlled && index === 0 ? characterActivationCount : 0"
-          :special-effect="isPlayerControlled && index === 0 ? firstCardSpecialEffect : ''"
+          :card="slot.card"
+          :is-in-hand="isPlayerControlled && index < characterHandSize"
+          :hand-index="isPlayerControlled && index < characterHandSize ? index : -1"
+          :is-pending-activation="index === 0 && characterActivationCount > 0"
+          :activation-count="index === 0 && characterActivationCount > 0 ? characterActivationCount : 0"
+          :special-effect="index === 0 && characterActivationCount > 0 ? firstCardSpecialEffect : ''"
           :owner="character"
+          @card-clicked="handleCardActivation" 
+          :style="{ 
+            border: isPlayerControlled && index < characterHandSize ? '2px solid gold' : 'none',
+            marginRight: index < characterHandSize -1 ? '10px' : '0px' /* Add margin between hand cards */
+          }"
+          class="card-in-hand"
+        />
+        <!-- Display non-hand cards differently or not at all for player -->
+        <!-- For simplicity, we'll still render them but without hand-specific interactions/styling if not player controlled -->
+         <Card
+          v-if="!isPlayerControlled && index >= characterHandSize"
+          :key="`deck-${index}`" 
+          :card="slot.card" 
+          :is-in-hand="false"
+          :activation-count="0"
+          :owner="character"
+          class="card-in-deck" 
         />
       </div>
     </div>
 
     <div v-if="isPlayerControlled" class="player-actions">
       <div class="hints">
-        <p>按键提示：J - 运气，K - 发动（可多次发动），L - 结束回合。</p>
+        <p>按键提示：J - 运气 (首张牌)，数字 1-{{characterHandSize}} - 发动对应手牌，L - 结束回合。</p>
       </div>
       <button
         class="end-turn-button"
@@ -47,7 +66,7 @@
 <script setup>
 import { computed, toRefs } from 'vue';
 import Card from './Card.vue';
-import gameContext from '../models/DefaultGameSetup'; // For canEndTurn logic, if needed directly
+// import gameContext from '../models/DefaultGameSetup'; // Not used directly for canEndTurn anymore
 
 const props = defineProps({
   character: {
@@ -62,24 +81,31 @@ const props = defineProps({
     type: String,
     default: ''
   },
-  firstCardSpecialEffect: {
+  firstCardSpecialEffect: { // This might be re-evaluated; applies to card at index 0 if pending
     type: String,
     default: ''
   },
-  // canEndTurn is now passed as a prop for player-controlled hand
   canEndTurn: {
       type: Boolean,
       default: false
   }
 });
 
-const emit = defineEmits(['end-turn']);
+const emit = defineEmits(['end-turn', 'activate-card']);
 
-// Update to use cardSlots
 const characterCardSlots = computed(() => props.character?.cardSlots || []);
 const characterCurrentAP = computed(() => props.character?.currentAP || 0);
 const characterMaxAP = computed(() => props.character?.maxAP || 0);
 const characterActivationCount = computed(() => props.character?.activationCount || 0);
+const characterHandSize = computed(() => props.character?.handSize || 0);
+
+const handleCardActivation = (payload) => {
+  if (props.isPlayerControlled && payload.handIndex >= 0 && payload.handIndex < characterHandSize.value) {
+    if (props.character && props.character.cardSlots && props.character.cardSlots[payload.handIndex] && !props.character.cardSlots[payload.handIndex].isEmpty()) {
+        emit('activate-card', payload.handIndex);
+    }
+  }
+};
 
 </script>
 
@@ -124,13 +150,36 @@ const characterActivationCount = computed(() => props.character?.activationCount
   box-shadow: 0 0 8px rgba(76, 175, 80, 0.7), inset 0 1px 2px rgba(0,0,0,0.1);
 }
 
+.cards-row-wrapper {
+  /* Ensures that the card row itself can be centered if it doesn't fill the wrapper */
+  display: flex;
+  justify-content: center;
+}
+
 .cards-row {
   display: flex;
   flex-direction: row;
-  gap: 10px;
-  justify-content: center;
-  min-height: 190px; /* Ensure a minimum height even if no cards, to prevent layout shifts */
+  gap: 10px; /* Gap between all cards */
+  justify-content: flex-start; /* Align cards to the start, wrapper will center */
+  min-height: 190px; 
+  /* Allow cards to wrap if too many, though handSize should limit this for player */
+  flex-wrap: wrap; 
 }
+
+.card-in-hand {
+  /* Styles for cards that are part of the player's hand */
+  cursor: pointer; /* Indicate they are clickable */
+}
+.card-in-hand:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.card-in-deck {
+  /* Styles for cards not in hand, e.g., enemy's non-hand cards or player's deck cards if shown */
+  opacity: 0.7; /* Example: make them less prominent */
+}
+
 
 .no-cards-enemy {
   min-height: 190px; 

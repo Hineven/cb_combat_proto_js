@@ -30,6 +30,7 @@
         :first-card-special-effect="playerFirstCardSpecialEffect"
         :can-end-turn="canEndTurn"
         @end-turn="$emit('end-turn')"
+        @activate-card="$emit('activate-card', $event)"
       />
     </div>
   </div>
@@ -53,7 +54,7 @@ const props = defineProps({
   enemyFirstCardSpecialEffect: String,
 });
 
-const emit = defineEmits(['end-turn']);
+const emit = defineEmits(['end-turn', 'activate-card']); // Ensure 'activate-card' is emitted
 </script>
 
 <style scoped>

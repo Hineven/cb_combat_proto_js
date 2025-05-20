@@ -12,6 +12,7 @@
         :enemyFeedbackClass="enemyFeedbackClass"
         :enemyFirstCardSpecialEffect="enemyFirstCardSpecialEffect"
         @end-turn="handleEndTurn"
+        @activate-card="handleActivateCard"
       />
     </div>
     <div class="card-config-container" v-else-if="currentView === 'cardConfig'">
@@ -98,18 +99,41 @@ const handleEndTurn = () => {
   if (canEndTurn.value) {
     applyFeedback('player', 'feedback-end-turn', '');
     gameContext.playerEndTurn();
+    updateGameStatus();
+  }
+};
+
+const handleActivateCard = (cardIndexInHand) => {
+  if (isPlayerTurn.value) {
+    if (cardIndexInHand >= 0 && cardIndexInHand < playerState.value.handSize && 
+        playerState.value.cardSlots[cardIndexInHand] && 
+        !playerState.value.cardSlots[cardIndexInHand].isEmpty()) {
+      applyFeedback('player', 'feedback-activate', 'activating'); 
+      gameContext.playerActivation(cardIndexInHand);
+      updateGameStatus();
+    } else {
+      console.warn(`Attempted to activate invalid card index: ${cardIndexInHand}`);
+    }
   }
 };
 
 const handleKeyDown = (e) => {
-  if (currentView.value !== 'battle') return; // 只在战斗视图中处理游戏快捷键
+  if (currentView.value !== 'battle') return;
   if (!isPlayerTurn.value) return;
+
   if (e.key === 'j') {
     applyFeedback('player', 'feedback-cultivate', 'cultivating');
     gameContext.playerCultivation();
-  } else if (e.key === 'k') {
-    applyFeedback('player', 'feedback-activate', 'activating');
-    gameContext.playerActivation();
+    updateGameStatus();
+  } else if (e.key >= '1' && e.key <= '9') {
+    const handCardIndex = parseInt(e.key) - 1;
+    if (handCardIndex >= 0 && handCardIndex < playerState.value.handSize) {
+      if (playerState.value.cardSlots && playerState.value.cardSlots[handCardIndex] && !playerState.value.cardSlots[handCardIndex].isEmpty()) {
+        handleActivateCard(handCardIndex);
+      } else {
+        // console.log(`No card at hand position ${parseInt(e.key)} to activate.`);
+      }
+    }
   } else if (e.key === 'l' && canEndTurn.value) {
     handleEndTurn();
   }

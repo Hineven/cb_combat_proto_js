@@ -22,6 +22,7 @@ export class PlayingCharacterState extends CharacterState {
     super();
     this.name = 'Player';
     this.cardSlots = [new CardSlot(), new CardSlot(), new CardSlot()]; // 卡槽列表，默认3个空卡槽
+    this.handSize = 3; // 新增：手牌数量
     this.currentJin = 0; // 当前金灵气数量
     this.currentMu  = 0; // 当前木灵气数量
     this.currentShui = 0; // 当前水灵气数量
@@ -43,6 +44,7 @@ export class EnemyState extends PlayingCharacterState {
   constructor() {
     super();
     this.name = 'Enemy';
+    this.handSize = 3; // 新增：手牌数量，敌人也拥有手牌概念
     this.isPlayer = false; // 标记为敌对角色
     this.aiType = "basic"; // 敌对角色的AI类型，可以在Enemies.js中定义不同的AI
     this.preferActivation = 0.7; // 倾向于发动卡牌的概率
@@ -59,39 +61,58 @@ export class EnemyState extends PlayingCharacterState {
       // 每次操作前等待一定时间
       await new Promise(resolve => setTimeout(resolve, this.actionDelay));
       
-      // 看看是发动还是运气
-      const firstSlot = this.cardSlots.length > 0 ? this.cardSlots[0] : null;
-      const canActivateCard = firstSlot && !firstSlot.isEmpty() && firstSlot.card.getCanActivate(ctx, this);
+      let bestCardIndex = -1;
+      let bestCardScore = -Infinity; 
+
+      // AI决策：在手牌中选择最佳卡牌发动
+      for (let i = 0; i < Math.min(this.cardSlots.length, this.handSize); i++) {
+        const cardSlot = this.cardSlots[i];
+        if (cardSlot && !cardSlot.isEmpty() && cardSlot.card.getCanActivate(ctx, this)) {
+          // 简单的评分：能发动的牌就是好牌，可以根据卡牌效果和当前战局进行更复杂的评分
+          const score = 1; // 示例评分，后续可以扩展
+          if (score > bestCardScore) {
+            bestCardScore = score;
+            bestCardIndex = i;
+          }
+        }
+      }
+      
+      const canActivateChosenCard = bestCardIndex !== -1;
 
       const shouldActivate = Math.random() < this.preferActivation && 
-                            this.cardSlots.length > 0 && // Ensure there are card slots
-                            !firstSlot.isEmpty() && // Ensure the first slot is not empty
-                            canActivateCard &&
+                            canActivateChosenCard &&
                             this.activationCount < this.maxPendingActivation;
       
       if (shouldActivate) {
-        // 尝试发动卡牌
-        const success = ctx.activation(this);
+        // 尝试发动选中的卡牌 (bestCardIndex)
+        const success = ctx.activation(this, bestCardIndex);
         if (!success) {
-          // 如果发动失败，执行运气 (前提是卡槽不为空)
-          if (this.cardSlots.length > 0 && !firstSlot.isEmpty()) ctx.cultivation(this);
-          else if (this.cardSlots.length > 0 && firstSlot.isEmpty()) {
-            // 如果是空卡槽，也执行一次“运气”来轮换，即使它没效果
+          // 如果发动失败（例如AP不足以支付消耗，或卡牌本身发动条件不满足），则执行运气
+          // 运气操作仍然针对牌堆顶的第一张牌
+          if (this.cardSlots.length > 0 && !this.cardSlots[0].isEmpty()) {
+            ctx.cultivation(this);
+          } else if (this.cardSlots.length > 0 && this.cardSlots[0].isEmpty()) {
+            // 如果首位是空卡槽，也执行一次“运气”来轮换
             ctx.cultivation(this);
           }
         }
         action = "used_card";
       } else {
-        // 执行运气 (即使是空卡槽也执行以轮换)
-        if (this.cardSlots.length > 0) ctx.cultivation(this);
+        // 如果不发动，或者没有可发动的牌，则执行运气
+        // 运气操作仍然针对牌堆顶的第一张牌
+        if (this.cardSlots.length > 0) {
+          ctx.cultivation(this);
+        }
         action = "used_card";
       }
+      // AI行动后，检查战斗是否结束，如果AP耗尽也可能提前结束自己的回合
+      if (ctx.checkBattleOver() || this.currentAP <= 0) break;
     }
     
-    // 当行动点耗尽时，主动结束回合
-    await new Promise(resolve => setTimeout(resolve, this.actionDelay));
-    if (this.currentAP === 0) { // Ensure AP is actually 0 before ending turn
-        ctx.endTurn(this);
+    // 当行动点耗尽或AI决定结束时，主动结束回合
+    if (!ctx.isBattleOver && this.currentAP === 0) { // 确保战斗未结束且AP耗尽
+      await new Promise(resolve => setTimeout(resolve, this.actionDelay)); // 给玩家一点反应时间
+      ctx.endTurn(this);
     }
     
     return action;

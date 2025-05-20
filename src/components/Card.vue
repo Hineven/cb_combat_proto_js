@@ -7,7 +7,7 @@
       activationCountClass
     ]"
     :style="cardStyle"
-    @click="handleClick"
+    @click="handleCardClick"
   >
     <div v-if="decorationType === 'stripe'" class="decoration stripe-decoration" :style="decorationStyle"></div>
     <div v-if="decorationType === 'corner'" class="decoration corner-decoration-top-left" :style="cornerDecorationStyle"></div>
@@ -22,43 +22,51 @@
 </template>
 
 <script setup>
-import { ref, watch, onUnmounted, computed } from 'vue';
+import { ref, watch, onUnmounted, computed, defineEmits } from 'vue';
 import gameContext from '../models/DefaultGameSetup';
 
 const props = defineProps({
   card: { type: Object, required: true },
-  isFirstCard: { type: Boolean, default: false },
   activationCount: { type: Number, default: 0 },
   specialEffect: { type: String, default: '' }, // 'cultivating', 'activating'
-  owner: { type: Object, default: () => gameContext.player } // Default to player if not specified
+  owner: { type: Object, default: () => gameContext.player },
+  isInHand: { type: Boolean, default: false }, // New: Is this card in the player's active hand?
+  handIndex: { type: Number, default: -1 }, // New: The index of this card in the hand (0 to handSize-1)
+  isPendingActivation: { type: Boolean, default: false } // New: Is this card (at index 0) pending activation?
 });
+
+const emit = defineEmits(['card-clicked']); // Define the custom event
 
 const cachedDescription = ref('');
 const passiveDescription = ref(''); // New ref for passive description
 const isHighlighted = ref(false);
 
-const handleClick = () => {
+const handleCardClick = () => {
   isHighlighted.value = true;
   setTimeout(() => {
     isHighlighted.value = false;
   }, 300);
+  // Emit an event with the handIndex, which CharacterHand can use
+  emit('card-clicked', { handIndex: props.handIndex, card: props.card }); 
 };
 
 const specialEffectClass = computed(() => {
-  if (props.isFirstCard && props.specialEffect === 'cultivating') {
+  // Special effects like cultivating/activating apply if the card is pending activation (now at index 0)
+  if (props.isPendingActivation && props.specialEffect === 'cultivating') {
     return 'card-cultivating-feedback';
   }
-  if (props.isFirstCard && props.specialEffect === 'activating') {
+  if (props.isPendingActivation && props.specialEffect === 'activating') {
     return 'card-activating-feedback';
   }
   return '';
 });
 
 const activationCountClass = computed(() => {
-  if (props.isFirstCard && props.activationCount > 0) {
+  // Activation count visual feedback applies if the card is pending activation (at index 0)
+  if (props.isPendingActivation && props.activationCount > 0) {
     if (props.activationCount === 1) return 'activation-count-1';
     if (props.activationCount === 2) return 'activation-count-2';
-    if (props.activationCount >= 3) return 'activation-count-3'; // Max visual for 3+
+    if (props.activationCount >= 3) return 'activation-count-3';
   }
   return '';
 });
@@ -66,9 +74,14 @@ const activationCountClass = computed(() => {
 const cardStyle = computed(() => {
   const majorColor = typeof props.card.getCardMajorColor === 'function' ? props.card.getCardMajorColor(gameContext, props.owner) : '#fff';
   const minorColor = typeof props.card.getMinorColor === 'function' ? props.card.getMinorColor(gameContext, props.owner) : '#ddd';
+  let borderStyle = `10px solid ${minorColor}`;
+  if (props.isInHand) {
+    borderStyle = `10px solid gold`; // Highlight for cards in hand
+  }
   return {
     background: majorColor,
-    borderColor: minorColor
+    border: borderStyle,
+    // Add a visual cue for hand index if needed, e.g., a small number
   };
 });
 
@@ -131,9 +144,9 @@ onUnmounted(() => {
 <style scoped>
 .card {
   width: 120px;
-  height: 180px; /* Adjusted height to potentially accommodate passive description */
+  height: 180px; 
   background: #fff;
-  border: 10px solid #ddd;
+  /* border is now dynamically set in cardStyle */
   border-radius: 4px;
   padding: 10px;
   text-align: center;

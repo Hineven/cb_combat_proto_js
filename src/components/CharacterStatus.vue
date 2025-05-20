@@ -2,21 +2,22 @@
   <div class="status-column-wrapper"> <!-- Added a wrapper for positioning context -->
     <div class="status-column">
       <h3>{{ title }}</h3>
-      <div class="stats-grid">
-        <!-- HP Bar Start -->
-        <div class="stat-item health-bar-container">
-          <span class="stat-label">HP:</span>
-          <div class="health-bar">
-            <div 
-              class="health-bar-fill" 
-              :style="{ width: healthPercentage + '%' }"
-            ></div>
-            <span class="health-bar-text">
-              {{ character.currentHP !== undefined ? character.currentHP.toFixed(0) : 'N/A' }}/{{ character.maxHP !== undefined ? character.maxHP.toFixed(0) : 'N/A' }}
-            </span>
-          </div>
+      <!-- HP Bar Start - Now on its own row -->
+      <div class="health-bar-container stat-item">
+        <span class="stat-label">HP:</span>
+        <div class="health-bar">
+          <div 
+            class="health-bar-fill" 
+            :style="{ width: healthPercentage + '%' }"
+          ></div>
+          <span class="health-bar-text">
+            {{ character.currentHP !== undefined ? character.currentHP.toFixed(0) : 'N/A' }}/{{ character.maxHP !== undefined ? character.maxHP.toFixed(0) : 'N/A' }}
+          </span>
         </div>
-        <!-- HP Bar End -->
+      </div>
+      <!-- HP Bar End -->
+      <!-- Other Stats Grid -->
+      <div class="stats-grid">
         <div class="stat-item">
           <span class="stat-label">攻:</span>
           <span class="stat-value">{{ character.computedAttack !== undefined ? character.computedAttack.toFixed(0) : 'N/A' }}</span>
@@ -111,11 +112,23 @@ export default {
   text-align: center;
 }
 
+/* Styles for the dedicated HP bar row */
+.health-bar-container.stat-item {
+  display: flex; /* Already a stat-item, but ensure flex properties for label + bar */
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.03);
+  padding: 3px 0px 3px 6px; /* Original padding from health-bar-container */
+  border-radius: 4px;
+  font-size: 0.85em;
+  margin-bottom: 6px; /* Add some space below the HP bar */
+  /* No grid-column span needed as it's outside the .stats-grid now */
+}
+
+/* Grid for other stats like Attack and Defense */
 .stats-grid {
   display: grid;
-  /* Adjusted to ensure HP bar can span more space if needed, or items wrap nicely */
   grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); 
-  gap: 4px; /* Reduced gap */
+  gap: 4px;
   margin-bottom: 8px;
 }
 
@@ -127,20 +140,6 @@ export default {
   padding: 3px 6px;
   border-radius: 4px;
   font-size: 0.85em;
-}
-
-.health-bar-container {
-  /* This will make the health bar take up more space if the grid allows */
-  /* grid-column: span 2; /* Example: if you want it to span 2 columns */
-  /* For now, let it behave like other stat items */
-  padding: 3px 0px 3px 6px; /* Adjust padding to align label */
-}
-
-.stat-label {
-  font-weight: bold;
-  color: #555;
-  margin-right: 5px;
-  white-space: nowrap; /* Prevent label from wrapping */
 }
 
 .health-bar {

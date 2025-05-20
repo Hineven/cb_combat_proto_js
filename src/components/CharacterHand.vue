@@ -17,34 +17,32 @@
         <!-- No specific message for enemy with no cards, or a subtle indicator -->
       </div>
       <div class="cards-row">
-        <Card
-          v-for="(slot, index) in characterCardSlots"
-          :key="index" 
-          :card="slot.card"
-          :is-in-hand="isPlayerControlled && index < characterHandSize"
-          :hand-index="isPlayerControlled && index < characterHandSize ? index : -1"
-          :is-pending-activation="index === 0 && characterActivationCount > 0"
-          :activation-count="index === 0 && characterActivationCount > 0 ? characterActivationCount : 0"
-          :special-effect="index === 0 && characterActivationCount > 0 ? firstCardSpecialEffect : ''"
-          :owner="character"
-          @card-clicked="handleCardActivation" 
-          :style="{ 
-            border: isPlayerControlled && index < characterHandSize ? '2px solid gold' : 'none',
-            marginRight: index < characterHandSize -1 ? '10px' : '0px' /* Add margin between hand cards */
-          }"
-          class="card-in-hand"
-        />
-        <!-- Display non-hand cards differently or not at all for player -->
-        <!-- For simplicity, we'll still render them but without hand-specific interactions/styling if not player controlled -->
-         <Card
-          v-if="!isPlayerControlled && index >= characterHandSize"
-          :key="`deck-${index}`" 
-          :card="slot.card" 
-          :is-in-hand="false"
-          :activation-count="0"
-          :owner="character"
-          class="card-in-deck" 
-        />
+        <template v-for="(slot, index) in characterCardSlots" :key="slot.id || index">
+          <Card
+            v-if="isPlayerControlled || index < characterHandSize"
+            :card="slot.card"
+            :is-in-hand="isPlayerControlled && index < characterHandSize"
+            :hand-index="isPlayerControlled && index < characterHandSize ? index : -1"
+            :is-pending-activation="index === 0 && characterActivationCount > 0"
+            :activation-count="index === 0 && characterActivationCount > 0 ? characterActivationCount : 0"
+            :special-effect="index === 0 && characterActivationCount > 0 && isPlayerControlled ? firstCardSpecialEffect : (index === 0 && characterActivationCount > 0 && !isPlayerControlled ? actionFeedbackEffect : '')"
+            :owner="character"
+            @card-clicked="handleCardActivation"
+            :style="{
+              border: isPlayerControlled && index < characterHandSize ? '2px solid gold' : 'none',
+              marginRight: index < characterHandSize - 1 ? '10px' : '0px'
+            }"
+            class="card-in-hand"
+          />
+          <Card
+            v-else-if="!isPlayerControlled && index >= characterHandSize"
+            :card="slot.card"
+            :is-in-hand="false"
+            :activation-count="0"
+            :owner="character"
+            class="card-in-deck"
+          />
+        </template>
       </div>
     </div>
 
@@ -66,7 +64,6 @@
 <script setup>
 import { computed, toRefs } from 'vue';
 import Card from './Card.vue';
-// import gameContext from '../models/DefaultGameSetup'; // Not used directly for canEndTurn anymore
 
 const props = defineProps({
   character: {
@@ -81,7 +78,11 @@ const props = defineProps({
     type: String,
     default: ''
   },
-  firstCardSpecialEffect: { // This might be re-evaluated; applies to card at index 0 if pending
+  firstCardSpecialEffect: { 
+    type: String,
+    default: ''
+  },
+  actionFeedbackEffect: { // Added for enemy, mirrors playerFirstCardSpecialEffect logic from BattleScreen
     type: String,
     default: ''
   },

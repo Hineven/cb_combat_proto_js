@@ -21,6 +21,7 @@
 import { PlayingCharacterState, EnemyState } from './CharacterStateBase.js';
 import { Effect, EffectType } from './EffectBase.js'; 
 import { CardBase, CardSlot, EmptyCard } from './CardBase.js'; 
+import eventBus from '../utils/eventBus.js'; // Import the event bus
 
 export class AttackContext {
   constructor() {
@@ -110,6 +111,7 @@ export class GameContext {
       character.currentHun  = 0;
       character.activeEffects = []; // 清空效果
       character.activationCount = 0; // 清空未决发动
+      // character.animationEventQueue = []; // REMOVED: No longer using queue on character for this
       // 可以根据需要添加更多状态的重置
       this.addLog(character, '状态已重置，准备战斗！');
     }
@@ -225,6 +227,19 @@ export class GameContext {
       }
     }
 
+    // MODIFIED: Internal method to emit animation events via event bus
+    _pushAnimationEvent(character, type, text) {
+      const eventId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+      const animationData = { 
+        characterId: character.id, // Make sure character objects have an 'id' field
+        id: eventId, 
+        type, 
+        text 
+      };
+      // console.log(`[GameContext] Emitting 'play-animation' event for ${character.name} (ID: ${character.id}):`, JSON.stringify(animationData)); // DEBUG
+      eventBus.emit('play-animation', animationData);
+    }
+
     // 造成伤害
     // @param {CharacterState} source - 伤害来源
     // @param {CharacterState} target - 伤害目标
@@ -243,6 +258,7 @@ export class GameContext {
       target.currentHP = Math.max(target.currentHP, 0); //确保HP不为负
 
       this.addLog(source, `对 ${target.name} 造成 ${final_damage.toFixed(2)} 伤害。`);
+      this._pushAnimationEvent(target, 'damage', `-${final_damage.toFixed(0)}`); // ADDED: Push damage animation event
       this.checkBattleOver(); // 每次攻击后检查战斗是否结束
     }
 
@@ -258,6 +274,7 @@ export class GameContext {
       if (healedAmount > 0) {
         const sourceName = source ? source.name : '效果';
         this.addLog(target, `被 ${sourceName} 恢复了 ${healedAmount.toFixed(2)} 生命。`);
+        this._pushAnimationEvent(target, 'heal', `+${healedAmount.toFixed(0)}`); // ADDED: Push heal animation event
       }
       // 可以在这里添加治疗相关的钩子，如果需要的话
       // this.triggerOnHealHooks(target, amount, source);

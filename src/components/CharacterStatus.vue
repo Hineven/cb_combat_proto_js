@@ -1,49 +1,65 @@
 <template>
-  <div class="status-column">
-    <h3>{{ title }}</h3>
-    <div class="stats-grid">
-      <div class="stat-item">
-        <span class="stat-label">HP:</span>
-        <span class="stat-value">{{ character.currentHP !== undefined ? character.currentHP.toFixed(0) : 'N/A' }}/{{ character.maxHP !== undefined ? character.maxHP.toFixed(0) : 'N/A' }}</span>
+  <div class="status-column-wrapper"> <!-- Added a wrapper for positioning context -->
+    <div class="status-column">
+      <h3>{{ title }}</h3>
+      <div class="stats-grid">
+        <!-- HP Bar Start -->
+        <div class="stat-item health-bar-container">
+          <span class="stat-label">HP:</span>
+          <div class="health-bar">
+            <div 
+              class="health-bar-fill" 
+              :style="{ width: healthPercentage + '%' }"
+            ></div>
+            <span class="health-bar-text">
+              {{ character.currentHP !== undefined ? character.currentHP.toFixed(0) : 'N/A' }}/{{ character.maxHP !== undefined ? character.maxHP.toFixed(0) : 'N/A' }}
+            </span>
+          </div>
+        </div>
+        <!-- HP Bar End -->
+        <div class="stat-item">
+          <span class="stat-label">攻:</span>
+          <span class="stat-value">{{ character.computedAttack !== undefined ? character.computedAttack.toFixed(0) : 'N/A' }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">防:</span>
+          <span class="stat-value">{{ character.computedDefense !== undefined ? character.computedDefense.toFixed(0) : 'N/A' }}</span>
+        </div>
       </div>
-      <div class="stat-item">
-        <span class="stat-label">攻:</span>
-        <span class="stat-value">{{ character.computedAttack !== undefined ? character.computedAttack.toFixed(0) : 'N/A' }}</span>
+      <div class="aura-display" v-if="character.isPlayer && hasAuras">
+        <span v-if="character.currentJin > 0" class="aura jin" title="金灵气">金:{{ character.currentJin }}</span>
+        <span v-if="character.currentMu > 0" class="aura mu" title="木灵气">木:{{ character.currentMu }}</span>
+        <span v-if="character.currentShui > 0" class="aura shui" title="水灵气">水:{{ character.currentShui }}</span>
+        <span v-if="character.currentHuo > 0" class="aura huo" title="火灵气">火:{{ character.currentHuo }}</span>
+        <span v-if="character.currentTu > 0" class="aura tu" title="土灵气">土:{{ character.currentTu }}</span>
+        <span v-if="character.currentHun > 0" class="aura hun" title="混元灵气">混:{{ character.currentHun }}</span>
       </div>
-      <div class="stat-item">
-        <span class="stat-label">防:</span>
-        <span class="stat-value">{{ character.computedDefense !== undefined ? character.computedDefense.toFixed(0) : 'N/A' }}</span>
+      <div class="effects-display-container" v-if="character.activeEffects && character.activeEffects.length > 0">
+        <strong>效果:</strong>
+        <div class="effects-row">
+          <EffectDisplay v-for="(effect, index) in character.activeEffects.filter(e => e.shouldDisplay)" :key="index" :effect="effect" />
+        </div>
       </div>
     </div>
-    <div class="aura-display" v-if="character.isPlayer && hasAuras">
-      <span v-if="character.currentJin > 0" class="aura jin" title="金灵气">金:{{ character.currentJin }}</span>
-      <span v-if="character.currentMu > 0" class="aura mu" title="木灵气">木:{{ character.currentMu }}</span>
-      <span v-if="character.currentShui > 0" class="aura shui" title="水灵气">水:{{ character.currentShui }}</span>
-      <span v-if="character.currentHuo > 0" class="aura huo" title="火灵气">火:{{ character.currentHuo }}</span>
-      <span v-if="character.currentTu > 0" class="aura tu" title="土灵气">土:{{ character.currentTu }}</span>
-      <span v-if="character.currentHun > 0" class="aura hun" title="混元灵气">混:{{ character.currentHun }}</span>
-    </div>
-    <div class="effects-display-container" v-if="character.activeEffects && character.activeEffects.length > 0">
-      <strong>效果:</strong>
-      <div class="effects-row">
-        <EffectDisplay v-for="(effect, index) in character.activeEffects.filter(e => e.shouldDisplay)" :key="index" :effect="effect" />
-      </div>
-    </div>
+    <StatusAnimator 
+      :characterId="character.id || title" 
+    />
   </div>
 </template>
 
 <script>
 import EffectDisplay from './EffectDisplay.vue';
+import StatusAnimator from './StatusAnimator.vue';
 
 export default {
   components: {
-    EffectDisplay
+    EffectDisplay,
+    StatusAnimator
   },
   props: {
     character: {
       type: Object,
       required: true,
-      default: () => ({}) // Provide a default empty object
     },
     title: {
       type: String,
@@ -51,6 +67,13 @@ export default {
     }
   },
   computed: {
+    healthPercentage() {
+      if (this.character && this.character.maxHP > 0 && this.character.currentHP !== undefined) {
+        const percentage = (this.character.currentHP / this.character.maxHP) * 100;
+        return Math.max(0, Math.min(percentage, 100)); // Ensure percentage is between 0 and 100
+      }
+      return 0;
+    },
     hasAuras() {
       if (!this.character || !this.character.isPlayer) return false;
       return (this.character.currentJin || 0) > 0 ||
@@ -60,11 +83,16 @@ export default {
              (this.character.currentTu || 0) > 0 ||
              (this.character.currentHun || 0) > 0;
     }
-  }
+  },
 };
 </script>
 
 <style scoped>
+.status-column-wrapper {
+  position: relative; /* For absolute positioning of StatusAnimator */
+  width: 100%;
+}
+
 .status-column {
   width: 100%; /* Let the parent (.side-panel) control the width */
   padding: 8px;
@@ -85,14 +113,15 @@ export default {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); /* 调整minmax以适应可能的空间减少 */
+  /* Adjusted to ensure HP bar can span more space if needed, or items wrap nicely */
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); 
   gap: 4px; /* Reduced gap */
   margin-bottom: 8px;
 }
 
 .stat-item {
   display: flex;
-  justify-content: space-between; /* Label and value on opposite ends */
+  /* justify-content: space-between; /* Label and value on opposite ends */
   align-items: center;
   background-color: rgba(0, 0, 0, 0.03);
   padding: 3px 6px;
@@ -100,10 +129,49 @@ export default {
   font-size: 0.85em;
 }
 
+.health-bar-container {
+  /* This will make the health bar take up more space if the grid allows */
+  /* grid-column: span 2; /* Example: if you want it to span 2 columns */
+  /* For now, let it behave like other stat items */
+  padding: 3px 0px 3px 6px; /* Adjust padding to align label */
+}
+
 .stat-label {
   font-weight: bold;
   color: #555;
   margin-right: 5px;
+  white-space: nowrap; /* Prevent label from wrapping */
+}
+
+.health-bar {
+  flex-grow: 1; /* Allow health bar to take remaining space */
+  height: 20px; /* Or your desired height */
+  background-color: #e0e0e0; /* Light grey background for the bar */
+  border-radius: 4px;
+  position: relative; /* For positioning text and fill */
+  overflow: hidden; /* Ensures fill doesn't exceed border radius */
+  margin-right: 6px; /* Add some margin if next to other elements */
+}
+
+.health-bar-fill {
+  height: 100%;
+  background-color: #4CAF50; /* Green color for health */
+  border-radius: 4px; /* Match parent's border radius */
+  transition: width 0.5s ease-in-out; /* Animation for width changes */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.health-bar-text {
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  color: white; /* Or black, depending on contrast with fill */
+  font-size: 0.8em;
+  font-weight: bold;
+  line-height: 20px; /* Center text vertically */
+  text-shadow: 1px 1px 1px rgba(0,0,0,0.5); /* Make text more readable */
 }
 
 .stat-value {

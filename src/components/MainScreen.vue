@@ -8,11 +8,12 @@
         :isPlayerTurn="isPlayerTurn"
         :canEndTurn="canEndTurn"
         :playerFeedbackClass="playerFeedbackClass"
-        :playerFirstCardSpecialEffect="playerFirstCardSpecialEffect"
+        :playerActionFeedbackEffect="playerActionFeedbackEffect"
         :enemyFeedbackClass="enemyFeedbackClass"
-        :enemyFirstCardSpecialEffect="enemyFirstCardSpecialEffect"
+        :enemyActionFeedbackEffect="enemyActionFeedbackEffect"
         @end-turn="handleEndTurn"
         @activate-card="handleActivateCard"
+        @consume-animation-event="handleConsumeAnimationEvent"
       />
     </div>
     <div class="card-config-container" v-else-if="currentView === 'cardConfig'">
@@ -46,9 +47,9 @@ const currentView = ref('battle'); // 新增，控制当前显示的页面
 
 // Feedback related refs for player and enemy
 const playerFeedbackClass = ref('');
-const playerFirstCardSpecialEffect = ref('');
+const playerActionFeedbackEffect = ref(''); // Renamed from playerFirstCardSpecialEffect
 const enemyFeedbackClass = ref(''); // For enemy animations
-const enemyFirstCardSpecialEffect = ref(''); // For enemy card specific animations
+const enemyActionFeedbackEffect = ref(''); // Renamed from enemyFirstCardSpecialEffect
 
 let playerFeedbackTimeoutId = null;
 let enemyFeedbackTimeoutId = null; // Separate timeout for enemy
@@ -72,11 +73,11 @@ const applyFeedback = (target, feedbackClass, cardEffect) => {
     playerFeedbackClass.value = feedbackClass;
     // 使用 cardSlots 替代 cards
     if (playerState.value.cardSlots && playerState.value.cardSlots.length > 0) {
-      playerFirstCardSpecialEffect.value = cardEffect;
+      playerActionFeedbackEffect.value = cardEffect; // Renamed
     }
     playerFeedbackTimeoutId = setTimeout(() => {
       playerFeedbackClass.value = ''
-      playerFirstCardSpecialEffect.value = ''
+      playerActionFeedbackEffect.value = '' // Renamed
       playerFeedbackTimeoutId = null
     }, 500);
   } else if (target === 'enemy') {
@@ -85,11 +86,11 @@ const applyFeedback = (target, feedbackClass, cardEffect) => {
     enemyFeedbackClass.value = feedbackClass;
     // 使用 cardSlots 替代 cards
     if (enemyState.value.cardSlots && enemyState.value.cardSlots.length > 0) { // Assuming enemy cards might have special effects too
-        enemyFirstCardSpecialEffect.value = cardEffect;
+        enemyActionFeedbackEffect.value = cardEffect; // Renamed
     }
     enemyFeedbackTimeoutId = setTimeout(() => {
       enemyFeedbackClass.value = ''
-      enemyFirstCardSpecialEffect.value = ''
+      enemyActionFeedbackEffect.value = '' // Renamed
       enemyFeedbackTimeoutId = null
     }, 500);
   }
@@ -115,6 +116,18 @@ const handleActivateCard = (cardIndexInHand) => {
       console.warn(`Attempted to activate invalid card index: ${cardIndexInHand}`);
     }
   }
+};
+
+const handleConsumeAnimationEvent = (payload) => {
+  // payload is { character, eventId }
+  // The character in payload is the direct reference from gameContext
+  console.log('MainScreen: consume-animation-event received, consuming:', payload);
+  gameContext.consumeAnimationEvent(payload.character, payload.eventId);
+  // The periodic update in onMounted will refresh playerState and enemyState,
+  // which should propagate the updated animationEventQueue.
+  // Alternatively, explicitly call updateGameStatus() if immediate reflection is needed
+  // and the interval is too long, but the interval should be fine.
+  // updateGameStatus(); // This might be redundant due to the interval but ensures promptness if needed.
 };
 
 const handleKeyDown = (e) => {

@@ -5,19 +5,27 @@
         :character="enemyState"
         :is-player-controlled="false"
         :current-feedback-class="enemyFeedbackClass"
-        :first-card-special-effect="enemyFirstCardSpecialEffect"
+        :action-feedback-effect="enemyActionFeedbackEffect"
       />
     </div>
 
     <div class="game-panels-container">
       <div class="side-panel player-panel">
-        <CharacterStatus :character="playerState" title="玩家" />
+        <CharacterStatus
+          :character="playerState"
+          title="玩家"
+          @consume-animation-event="handleConsumeAnimationEvent"
+        />
       </div>
       <div class="center-panel">
         <GameLog :logs="gameLogs" />
       </div>
       <div class="side-panel enemy-panel">
-        <CharacterStatus :character="enemyState" title="敌人" />
+        <CharacterStatus
+          :character="enemyState"
+          title="敌人"
+          @consume-animation-event="handleConsumeAnimationEvent"
+        />
       </div>
     </div>
 
@@ -27,7 +35,7 @@
         :character="playerState"
         :is-player-controlled="true"
         :current-feedback-class="playerFeedbackClass"
-        :first-card-special-effect="playerFirstCardSpecialEffect"
+        :action-feedback-effect="playerActionFeedbackEffect"
         :can-end-turn="canEndTurn"
         @end-turn="$emit('end-turn')"
         @activate-card="$emit('activate-card', $event)"
@@ -49,12 +57,16 @@ const props = defineProps({
   isPlayerTurn: Boolean,
   canEndTurn: Boolean,
   playerFeedbackClass: String,
-  playerFirstCardSpecialEffect: String,
+  playerActionFeedbackEffect: String,
   enemyFeedbackClass: String,
-  enemyFirstCardSpecialEffect: String,
+  enemyActionFeedbackEffect: String,
 });
 
-const emit = defineEmits(['end-turn', 'activate-card']); // Ensure 'activate-card' is emitted
+const emit = defineEmits(['end-turn', 'activate-card', 'consume-animation-event']); // Add 'consume-animation-event'
+
+const handleConsumeAnimationEvent = (payload) => {
+  emit('consume-animation-event', payload);
+};
 </script>
 
 <style scoped>

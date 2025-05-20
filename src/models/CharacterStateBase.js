@@ -2,6 +2,7 @@ import {CardSlot} from './CardBase.js';
 // 角色状态类，玩家角色和敌对角色共有的状态
 export class CharacterState {
   constructor() {
+    this.id = null; // Added character ID
     this.name = '未命名角色'; // 角色名称，用于显示在日志中
     this.maxAP = 4; // 最大行动点
     this.maxHP = 50; // 最大生命值
@@ -20,6 +21,7 @@ export class CharacterState {
 export class PlayingCharacterState extends CharacterState {
   constructor() {
     super();
+    this.id = 'player'; // Set ID for player
     this.name = 'Player';
     this.cardSlots = [new CardSlot(), new CardSlot(), new CardSlot()]; // 卡槽列表，默认3个空卡槽
     this.handSize = 3; // 新增：手牌数量
@@ -43,6 +45,7 @@ export class PlayingCharacterState extends CharacterState {
 export class EnemyState extends PlayingCharacterState {
   constructor() {
     super();
+    this.id = 'enemy'; // Set ID for enemy
     this.name = 'Enemy';
     this.handSize = 3; // 新增：手牌数量，敌人也拥有手牌概念
     this.isPlayer = false; // 标记为敌对角色

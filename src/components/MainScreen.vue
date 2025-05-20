@@ -18,13 +18,14 @@
     </div>
     <div class="card-config-container" v-else-if="currentView === 'cardConfig'">
       <CardConfigScreen />
-    </div>
-
-    <div class="menu-sidebar">
+    </div>    <div class="menu-sidebar">
       <button @click="navigateTo('battle')" :class="{ active: currentView === 'battle' }">战斗</button>
       <button @click="navigateTo('cardConfig')" :class="{ active: currentView === 'cardConfig' }">卡牌配置</button>
       <!-- Menu content will go here -->
     </div>
+    
+    <!-- 对话屏幕覆盖层 -->
+    <DialogScreen />
   </div>
 </template>
 
@@ -34,6 +35,7 @@ import CharacterHand from './CharacterHand.vue';
 import GameLog from './GameLog.vue';
 import BattleScreen from './BattleScreen.vue'; // 新增
 import CardConfigScreen from './CardConfigScreen.vue'; // 新增
+import DialogScreen from './DialogScreen.vue'; // 导入对话屏幕组件
 import gameContext from '../models/DefaultGameSetup';
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 
@@ -43,7 +45,7 @@ const gameLogs = ref(gameContext.logs);
 const isPlayerTurn = ref(gameContext.canPlayerAct());
 const canEndTurn = ref(false);
 
-const currentView = ref('battle'); // 新增，控制当前显示的页面
+const currentView = ref('battle'); // 控制当前显示的页面
 
 // Feedback related refs for player and enemy
 const playerFeedbackClass = ref('');

@@ -34,8 +34,8 @@ import gameContext from '../models/DefaultGameSetup.js';
 // Import CardSlot if direct instantiation or type checking is needed, otherwise not strictly necessary here
 // import { CardSlot } from '../models/CardBase.js'; 
 
-// Import availableCards (which are {instance, blueprint} objects) and cardBlueprints from CardLibrary
-import { availableCards as cardLibraryEntries } from '../models/CardLibrary.js';
+// Import availableCards and allCardBlueprints from CardLibrary
+import { availableCards as cardLibraryEntries, allCardBlueprints } from '../models/CardLibrary.js';
 
 const playerState = ref(gameContext.player);
 const playerCardSlots = computed(() => playerState.value.cardSlots);
@@ -46,33 +46,36 @@ const handleSlotSelected = (index) => {
   selectedSlotIndex.value = index;
 };
 
-const handleCardChosen = (chosenLibraryEntry) => {
+const handleCardChosen = (chosenCard) => {
   if (selectedSlotIndex.value !== null && playerCardSlots.value[selectedSlotIndex.value]) {
     const selectedSlot = playerCardSlots.value[selectedSlotIndex.value];
-    const blueprintToInstantiate = chosenLibraryEntry.blueprint;
-
-    if (!blueprintToInstantiate || typeof blueprintToInstantiate.constructor !== 'function') {
-      console.error('Invalid card blueprint received:', blueprintToInstantiate);
+    
+    // 找到对应的卡牌蓝图
+    const cardIndex = cardLibraryEntries.indexOf(chosenCard);
+    const blueprint = allCardBlueprints[cardIndex];
+    
+    if (!blueprint || typeof blueprint.constructor !== 'function') {
+      console.error('找不到对应的卡牌蓝图:', chosenCard);
       return;
     }
 
-    // Create a new instance of the card using its blueprint constructor and args
-    const newCardInstance = new blueprintToInstantiate.constructor(...blueprintToInstantiate.args);
+    // 使用蓝图创建一个新的卡牌实例
+    const newCardInstance = new blueprint.constructor(...blueprint.args);
 
-    // Initialize the new card instance with the actual player and current game context
+    // 使用当前游戏上下文和玩家状态初始化新卡牌
     if (typeof newCardInstance.init === 'function') {
       newCardInstance.init(gameContext, playerState.value);
     } else {
-      console.warn(`Newly instantiated card ${blueprintToInstantiate.name} does not have an init method.`);
+      console.warn(`新创建的卡牌 ${newCardInstance.name} 没有 init 方法。`);
     }
 
     selectedSlot.setCard(newCardInstance);
     
-    // console.log(`Card ${newCardInstance.name} placed into slot ${selectedSlotIndex.value}.`);
-    // Optionally, deselect the slot after placing a card
+    // console.log(`卡牌 ${newCardInstance.name} 已放入槽位 ${selectedSlotIndex.value}。`);
+    // 可选，放置卡牌后取消选择
     // selectedSlotIndex.value = null;
   } else {
-    // console.log("No slot selected, or slot index is invalid, or chosen card data is missing blueprint.");
+    // console.log("没有选中槽位，或槽位索引无效。");
   }
 };
 

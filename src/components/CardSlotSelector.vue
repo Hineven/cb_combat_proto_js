@@ -3,7 +3,7 @@
     <h3>可选卡牌</h3>
     <div class="card-list">
       <div v-for="(entry, index) in availableCards" :key="index" class="card-preview-item" @click="handleCardClick(entry)">
-        <Card :card="entry.cardInstance" :owner="previewOwner" />
+        <Card :card="entry" :owner="previewOwner" />
       </div>
     </div>
   </div>

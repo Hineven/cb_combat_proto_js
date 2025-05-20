@@ -145,7 +145,8 @@ export class GameContext {
         this.addLog(`系统`, `${this.player.name} 被击败了！${this.enemy.name} 胜利！`);
         this.roundPhase = RoundPhaseType.BattleEnd;
         this.triggerBattleEndHooks(this.player); // 触发玩家方的战斗结束钩子
-        this.triggerBattleEndHooks(this.enemy); // 触发敌人方的战斗结束钩子
+        this.triggerBattleEndHooks(this.enemy); // 触发敌人方的战斗结束钩子        // 往事件总线发射事件
+        eventBus.emit('battle-end', { winner: this.winner, opponent: this.player });
         return true;
       }
       if (this.enemy.currentHP <= 0) {
@@ -155,6 +156,8 @@ export class GameContext {
         this.roundPhase = RoundPhaseType.BattleEnd;
         this.triggerBattleEndHooks(this.player);
         this.triggerBattleEndHooks(this.enemy);
+        // 往事件总线发射玩家胜利事件
+        eventBus.emit('battle-end', { winner: this.winner, opponent: this.enemy });
         return true;
       }
       return false;

@@ -17,8 +17,8 @@ gameContext.player.cardSlots = [
 ]; // 初始卡牌槽
 
 // 初始化敌人状态
-gameContext.enemy.maxHP = 100; // 最大生命值
-gameContext.enemy.currentHP = 100; // 初始生命值
+gameContext.enemy.maxHP = 10; // 最大生命值
+gameContext.enemy.currentHP = 10; // 初始生命值
 gameContext.enemy.maxAP = 3; // 敌人每回合3行动点
 gameContext.enemy.baseAttack = 12; // 敌人基础攻击力略高
 gameContext.enemy.baseDefense = 8; // 敌人基础防御力略低

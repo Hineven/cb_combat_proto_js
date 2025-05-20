@@ -1,6 +1,8 @@
-<template>
-  <div class="card-slot-editor" :class="{ selected: isSelected }" @click="handleClick">
-    <Card :card="cardSlot.card" :owner="previewOwner" />
+<template>  <div class="card-slot-editor" :class="{ selected: isSelected }" @click="handleClick">
+    <Card v-if="cardSlot.card" :card="cardSlot.card" :owner="previewOwner" />
+    <div v-else class="empty-card">
+      <p>空卡槽</p>
+    </div>
     <p v-if="isSelected" class="selected-indicator">当前选中</p>
   </div>
 </template>
@@ -56,5 +58,17 @@ const handleClick = () => {
   color: #4CAF50;
   font-weight: bold;
   font-size: 0.9em;
+}
+
+.empty-card {
+  width: 180px;
+  height: 250px;
+  border: 2px dashed #666;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-style: italic;
+  color: #999;
 }
 </style>

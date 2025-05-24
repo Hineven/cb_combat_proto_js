@@ -225,4 +225,13 @@ export default {
   gap: 5px; /* Reduced gap */
   justify-content: flex-start;
 }
+
+/* 添加头像样式 */
+.character-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin-bottom: 10px;
+  object-fit: cover;
+}
 </style>
